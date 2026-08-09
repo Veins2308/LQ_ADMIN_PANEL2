@@ -200,6 +200,41 @@
     .form-row { grid-template-columns: 1fr; }
     .modal { padding: 20px; }
   }
+
+  /* ── Perms Modal ── */
+  .perms-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+  .perms-tab  { padding:5px 12px; border-radius:20px; font-size:11px; font-weight:600;
+                cursor:pointer; border:1px solid var(--border); color:var(--text2);
+                background:var(--surface); transition:.15s; user-select:none; }
+  .perms-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .perms-panel { display:none; }
+  .perms-panel.active { display:block; }
+  .perms-feature { display:flex; align-items:center; justify-content:space-between;
+                   padding:9px 12px; border-radius:8px; margin-bottom:6px;
+                   background:var(--surface); border:1px solid var(--border); }
+  .perms-feature-name { font-size:13px; color:var(--text); flex:1; }
+  /* reuse existing toggle style */
+  .perms-toggle { position:relative; width:40px; height:22px; flex-shrink:0; }
+  .perms-toggle input { opacity:0; width:0; height:0; }
+  .perms-toggle .slider {
+    position:absolute; cursor:pointer; inset:0;
+    background:#555; border-radius:22px; transition:.2s;
+  }
+  .perms-toggle .slider::before {
+    content:""; position:absolute; width:16px; height:16px; border-radius:50%;
+    background:#fff; left:3px; bottom:3px; transition:.2s;
+  }
+  .perms-toggle input:checked + .slider { background:var(--red); }
+  .perms-toggle input:checked + .slider::before { transform:translateX(18px); }
+  .perms-section-head { font-size:10px; font-weight:700; color:var(--text2);
+                        letter-spacing:.08em; text-transform:uppercase;
+                        margin:12px 0 6px; padding-left:4px; }
+  .perms-modal-body { max-height:55vh; overflow-y:auto; padding-right:4px; }
+  .perms-actions { display:flex; gap:10px; justify-content:space-between;
+                   margin-top:16px; flex-wrap:wrap; }
+  .perms-modal { width: min(640px, 94vw) !important; }
+  .btn-blocked { background:#c0392b !important; }
+
 </style>
 </head>
 <body>
@@ -426,6 +461,37 @@
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal('renew-modal')">Hủy</button>
       <button class="btn btn-warning" id="renew-btn" onclick="confirmRenew()">Gia hạn</button>
+    </div>
+  </div>
+</div>
+
+<!-- Perms Modal -->
+<div class="modal-overlay" id="perms-modal" style="display:none">
+  <div class="modal perms-modal">
+    <button class="close" onclick="closeModal('perms-modal')">✕</button>
+    <h2>🔒 Phân quyền chức năng</h2>
+    <div id="perms-key-label" style="font-size:11px;color:var(--text2);font-family:monospace;
+         word-break:break-all;margin-bottom:12px;"></div>
+
+    <!-- Tab selector -->
+    <div class="perms-tabs" id="perms-tabs"></div>
+
+    <!-- Feature list -->
+    <div class="perms-modal-body">
+      <div id="perms-body"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="perms-actions">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="permsSelectNone()">✅ Mở hết</button>
+        <button class="btn btn-danger btn-sm" onclick="permsSelectAll()">🔒 Khoá hết</button>
+        <span id="perms-badge" style="font-size:12px;font-weight:600"></span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="closeModal('perms-modal')">Hủy</button>
+        <button class="btn btn-warning" id="perms-save-btn" onclick="confirmPerms()">💾 Lưu</button>
+      </div>
     </div>
   </div>
 </div>
@@ -668,6 +734,7 @@ function renderTable() {
         <div class="actions">
           <button class="btn btn-warning btn-sm" onclick="openRenew('${keyEsc}')" title="Gia hạn">🔄</button>
           <button class="btn btn-info btn-sm" onclick="openEditRole('${keyEsc}')" title="Sửa role">✏️</button>
+          <button class="btn btn-warning btn-sm" onclick="openPerms('${keyEsc}')" title="Phân quyền chức năng">🔒</button>
           ${effStatus === 'banned'
             ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${keyEsc}')">✅</button>`
             : `<button class="btn btn-danger btn-sm" onclick="banKey('${keyEsc}')">🚫</button>`}
@@ -891,6 +958,181 @@ async function confirmRenew() {
 
   btn.disabled = false;
   btn.textContent = 'Gia hạn';
+}
+
+
+// ════════════════════════════════════════════════════════
+//  FEATURE PERMISSIONS — danh sách chức năng theo tab
+// ════════════════════════════════════════════════════════
+const FEATURE_GROUPS = [
+  {
+    tab: 'MAIN',
+    sections: [
+      { title: 'MAIN', features: [
+        'Map sáng','Vẽ ESP','Vẽ line','Hiển thị tổng số địch','Vẽ box',
+        'Hiển thị khoảng cách tới địch','Hiển thị máu địch',
+        'Bỏ qua vẽ địch đã hiển thị','Hiển thị tên tướng địch'
+      ]},
+      { title: 'THÔNG TIN ĐỊCH', features: [
+        'Hiển thị thông tin team địch','Trạng thái chiêu cuối team địch',
+        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'
+      ]},
+    ]
+  },
+  {
+    tab: 'AIMBOT',
+    sections: [
+      { title: 'AIMBOT', features: ['Aimbot','Chiêu 1','Chiêu 2','Chiêu 3'] }
+    ]
+  },
+  {
+    tab: 'AUTO',
+    sections: [
+      { title: 'AUTO', features: [
+        'Auto mua đồ (Món đầu đề cử)','Auto bán mua đồ nhanh'
+      ]},
+      { title: 'TRỪNG TRỊ / BỘC PHÁ', features: [
+        'Auto trừng trị','Chỉ trừng trị Rồng và Tà Thần',
+        'Auto bộc phá','Auto băng sương','Auto hồi máu','Auto cấp cứu'
+      ]},
+    ]
+  },
+  {
+    tab: 'MOD SKIN',
+    sections: [
+      { title: 'MOD SKIN', features: [
+        'Mod rank','Mở khoá tất cả skin','Mod nút bấm','Mod thông báo diệt'
+      ]}
+    ]
+  },
+  {
+    tab: 'OTHER',
+    sections: [
+      { title: 'KHÁC', features: [
+        'Ẩn UID','Xem lịch sử đấu người khác (Đểu)'
+      ]}
+    ]
+  }
+];
+
+let permsKey = null;        // key đang edit
+let permsBlocked = new Set(); // features đang bị block
+
+function openPerms(key) {
+  permsKey = key;
+  const k = keys.find(k => k.key === key);
+  permsBlocked = new Set(k ? (k.blocked_features || []) : []);
+
+  document.getElementById('perms-key-label').textContent = 'Key: ' + key;
+
+  // Render tabs
+  const tabsEl  = document.getElementById('perms-tabs');
+  const bodyEl   = document.getElementById('perms-body');
+  tabsEl.innerHTML = '';
+  bodyEl.innerHTML = '';
+
+  FEATURE_GROUPS.forEach((group, gi) => {
+    // Tab button
+    const btn = document.createElement('div');
+    btn.className = 'perms-tab' + (gi === 0 ? ' active' : '');
+    btn.textContent = group.tab;
+    btn.onclick = () => {
+      document.querySelectorAll('.perms-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.perms-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('perms-panel-' + gi).classList.add('active');
+    };
+    tabsEl.appendChild(btn);
+
+    // Panel
+    const panel = document.createElement('div');
+    panel.className = 'perms-panel' + (gi === 0 ? ' active' : '');
+    panel.id = 'perms-panel-' + gi;
+
+    group.sections.forEach(sec => {
+      const sh = document.createElement('div');
+      sh.className = 'perms-section-head';
+      sh.textContent = sec.title;
+      panel.appendChild(sh);
+
+      sec.features.forEach(feat => {
+        const isBlocked = permsBlocked.has(feat);
+        const row = document.createElement('div');
+        row.className = 'perms-feature';
+        row.innerHTML = `
+          <span class="perms-feature-name">${feat}</span>
+          <label class="perms-toggle" title="${isBlocked ? 'Đang bị khoá' : 'Đang hoạt động'}">
+            <input type="checkbox" data-feat="${feat}" ${isBlocked ? 'checked' : ''}
+                   onchange="permsToggle(this)">
+            <span class="slider"></span>
+          </label>`;
+        panel.appendChild(row);
+      });
+    });
+
+    bodyEl.appendChild(panel);
+  });
+
+  // Stats badge
+  updatePermsBadge();
+  document.getElementById('perms-modal').style.display = 'flex';
+}
+
+function permsToggle(checkbox) {
+  const feat = checkbox.dataset.feat;
+  if (checkbox.checked) {
+    permsBlocked.add(feat);
+  } else {
+    permsBlocked.delete(feat);
+  }
+  updatePermsBadge();
+}
+
+function updatePermsBadge() {
+  const n = permsBlocked.size;
+  const el = document.getElementById('perms-badge');
+  el.textContent = n > 0 ? `${n} chức năng bị khoá` : 'Không có giới hạn';
+  el.style.color = n > 0 ? 'var(--red)' : 'var(--green)';
+}
+
+function permsSelectNone() {
+  document.querySelectorAll('#perms-body input[type=checkbox]').forEach(cb => {
+    cb.checked = false;
+    permsBlocked.delete(cb.dataset.feat);
+  });
+  updatePermsBadge();
+}
+
+function permsSelectAll() {
+  document.querySelectorAll('#perms-body input[type=checkbox]').forEach(cb => {
+    cb.checked = true;
+    permsBlocked.add(cb.dataset.feat);
+  });
+  updatePermsBadge();
+}
+
+async function confirmPerms() {
+  if (!permsKey) return;
+  const btn = document.getElementById('perms-save-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
+
+  const blocked = [...permsBlocked];
+  try {
+    await apiPost('/api/admin/setperms', { key: permsKey, blocked_features: blocked });
+    const k = keys.find(k => k.key === permsKey);
+    if (k) k.blocked_features = blocked;
+    filteredKeys = [...keys];
+    filterTable();
+    closeModal('perms-modal');
+    const n = blocked.length;
+    showToast(n > 0
+      ? `🔒 Đã khoá ${n} chức năng cho key này`
+      : `✅ Đã mở khoá toàn bộ chức năng`, 'ok');
+  } catch(e) { showToast('❌ ' + e.message, 'err'); }
+
+  btn.disabled = false;
+  btn.textContent = '💾 Lưu';
 }
 
 // ════════════════════════════════════════════════════════
