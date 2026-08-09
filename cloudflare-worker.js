@@ -79,10 +79,11 @@ export default {
       const daysLeft = Math.ceil((new Date(record.expiresAt) - now) / 86400000);
 
       return json({
-        status:    'valid',
-        role:      record.role,
-        days_left: daysLeft,
-        expires:   record.expiresAt,
+        status:           'valid',
+        role:             record.role,
+        days_left:        daysLeft,
+        expires:          record.expiresAt,
+        blocked_features: record.blocked_features || [],
         message:   'OK'
       }, corsHeaders);
     }
@@ -118,7 +119,8 @@ export default {
             devices:    record.devices || [],
             createdAt:  record.createdAt,
             expiresAt:  record.expiresAt,
-            note:       record.note || ''
+            note:             record.note || '',
+            blocked_features: record.blocked_features || []
           });
         } catch {}
       }
@@ -220,6 +222,46 @@ export default {
       if (record.status === 'expired') record.status = 'valid';
       await env.KEYS_KV.put(`key:${key}`, JSON.stringify(record));
       return json({ success: true, expiresAt: record.expiresAt }, corsHeaders);
+    }
+
+    // ── POST /api/admin/setrole ────────────────────────────────────────────
+    if (url.pathname === '/api/admin/setrole' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const { key, role } = await request.json();
+      if (!key || !['admin', 'member'].includes(role)) {
+        return json({ error: 'Invalid params (key, role must be admin|member)' }, corsHeaders, 400);
+      }
+
+      const raw = await env.KEYS_KV.get(`key:${key}`);
+      if (!raw) return json({ error: 'Not found' }, corsHeaders, 404);
+
+      const record = JSON.parse(raw);
+      record.role = role;
+      await env.KEYS_KV.put(`key:${key}`, JSON.stringify(record));
+      return json({ success: true, key, role }, corsHeaders);
+    }
+
+
+    // ── POST /api/admin/setperms ───────────────────────────────────────────
+    // Lưu danh sách features bị block cho một key cụ thể
+    if (url.pathname === '/api/admin/setperms' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const { key, blocked_features } = await request.json();
+      if (!key || !Array.isArray(blocked_features)) {
+        return json({ error: 'Invalid params (key, blocked_features[])' }, corsHeaders, 400);
+      }
+
+      const raw = await env.KEYS_KV.get(`key:${key}`);
+      if (!raw) return json({ error: 'Not found' }, corsHeaders, 404);
+
+      const record = JSON.parse(raw);
+      record.blocked_features = blocked_features;
+      await env.KEYS_KV.put(`key:${key}`, JSON.stringify(record));
+      return json({ success: true, key, blocked_features }, corsHeaders);
     }
 
     return json({ error: 'Not found' }, corsHeaders, 404);
