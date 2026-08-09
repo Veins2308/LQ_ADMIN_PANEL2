@@ -276,7 +276,8 @@ export default {
 
     // ── POST /api/admin/setconfig ───────────────────────────────────────────
     if (url.pathname === '/api/admin/setconfig' && request.method === 'POST') {
-      if (!adminOk) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
       const body = await request.json();
       if (body.banner_config) {
         await env.KEYS_KV.put('global:banner_config', JSON.stringify(body.banner_config));
