@@ -78,6 +78,7 @@
   .btn-danger   { background: var(--red);     color: #fff; }
   .btn-warning  { background: var(--orange);  color: #fff; }
   .btn-info     { background: var(--accent2); color: #fff; }
+  .btn-info     { background: #3a7bd5;     color: #fff; }
   .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--text2); }
   .btn-sm       { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -429,6 +430,26 @@
   </div>
 </div>
 
+<!-- Edit Role Modal -->
+<div class="modal-overlay" id="editrole-modal" style="display:none">
+  <div class="modal" style="width:340px">
+    <button class="close" onclick="closeModal('editrole-modal')">✕</button>
+    <h2>✏️ Sửa Role</h2>
+    <div style="margin-bottom:14px">
+      <div id="editrole-key-info" style="font-size:12px;color:var(--text2);margin-bottom:16px;font-family:monospace;word-break:break-all"></div>
+      <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--text2)">Chọn role mới</label>
+      <select id="editrole-select" style="width:100%;padding:10px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px">
+        <option value="member">👤 Member</option>
+        <option value="admin">👑 Admin</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeModal('editrole-modal')">Hủy</button>
+      <button class="btn btn-warning" id="editrole-btn" onclick="confirmEditRole()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -646,6 +667,7 @@ function renderTable() {
       <td>
         <div class="actions">
           <button class="btn btn-warning btn-sm" onclick="openRenew('${keyEsc}')" title="Gia hạn">🔄</button>
+          <button class="btn btn-info btn-sm" onclick="openEditRole('${keyEsc}')" title="Sửa role">✏️</button>
           ${effStatus === 'banned'
             ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${keyEsc}')">✅</button>`
             : `<button class="btn btn-danger btn-sm" onclick="banKey('${keyEsc}')">🚫</button>`}
@@ -869,6 +891,38 @@ async function confirmRenew() {
 
   btn.disabled = false;
   btn.textContent = 'Gia hạn';
+}
+
+// ════════════════════════════════════════════════════════
+//  EDIT ROLE
+// ════════════════════════════════════════════════════════
+let editingRoleKey = null;
+
+function openEditRole(key) {
+  editingRoleKey = key;
+  const k = keys.find(k => k.key === key);
+  document.getElementById('editrole-key-info').textContent = `Key: ${key}`;
+  document.getElementById('editrole-select').value = k ? (k.role || 'member') : 'member';
+  document.getElementById('editrole-modal').style.display = 'flex';
+}
+
+async function confirmEditRole() {
+  if (!editingRoleKey) return;
+  const newRole = document.getElementById('editrole-select').value;
+  const btn = document.getElementById('editrole-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
+  try {
+    await apiPost('/api/admin/setrole', { key: editingRoleKey, role: newRole });
+    const k = keys.find(k => k.key === editingRoleKey);
+    if (k) k.role = newRole;
+    filteredKeys = [...keys];
+    filterTable(); renderStats();
+    closeModal('editrole-modal');
+    showToast(`✅ Đã đổi role thành ${newRole === 'admin' ? '👑 Admin' : '👤 Member'}`, 'ok');
+  } catch(e) { showToast(`❌ ${e.message}`, 'err'); }
+  btn.disabled = false;
+  btn.textContent = '💾 Lưu';
 }
 
 // ════════════════════════════════════════════════════════
