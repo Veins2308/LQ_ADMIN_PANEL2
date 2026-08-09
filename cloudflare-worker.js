@@ -266,6 +266,31 @@ export default {
       return json({ success: true, deviceId, blocked_features }, corsHeaders);
     }
 
+
+    // ── GET /api/admin/getconfig ────────────────────────────────────────────
+    if (url.pathname === '/api/admin/getconfig') {
+      const raw = await env.KEYS_KV.get('global:banner_config');
+      const cfg = raw ? JSON.parse(raw) : {};
+      return json({ banner_config: cfg }, corsHeaders);
+    }
+
+    // ── POST /api/admin/setconfig ───────────────────────────────────────────
+    if (url.pathname === '/api/admin/setconfig' && request.method === 'POST') {
+      if (!adminOk) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const body = await request.json();
+      if (body.banner_config) {
+        await env.KEYS_KV.put('global:banner_config', JSON.stringify(body.banner_config));
+      }
+      return json({ success: true }, corsHeaders);
+    }
+
+    // ── GET /api/getconfig (public — for LQ_OBJ source to read banner config) ──
+    if (url.pathname === '/api/getconfig') {
+      const raw = await env.KEYS_KV.get('global:banner_config');
+      const cfg = raw ? JSON.parse(raw) : {};
+      return json({ banner_config: cfg }, corsHeaders);
+    }
+
     return json({ error: 'Not found' }, corsHeaders, 404);
   }
 };
