@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔐 Key Manager - LQ Mod</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e3a5f;
+    --accent: #3b82f6;
+    --accent2: #6366f1;
+    --green: #10b981;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --text: #e5e7eb;
+    --text2: #9ca3af;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* ── Login ── */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: var(--bg);
+  }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 40px; width: 360px;
+    box-shadow: 0 20px 60px rgba(59,130,246,0.15);
+  }
+  .login-card h1 { font-size: 22px; color: var(--accent); margin-bottom: 8px; }
+  .login-card p  { color: var(--text2); font-size: 13px; margin-bottom: 28px; }
+
+  /* ── App ── */
+  #app { display: none; }
+  .navbar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .navbar h1 { font-size: 18px; color: var(--accent); flex: 1; }
+  .navbar .badge { font-size: 11px; background: var(--accent2); color: #fff;
+    padding: 2px 8px; border-radius: 99px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+
+  /* ── Stats ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .stat-card .val { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-card .lbl { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  /* ── Toolbar ── */
+  .toolbar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+  .toolbar input[type=text], .toolbar select {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; outline: none;
+  }
+  .toolbar input[type=text] { flex: 1; min-width: 180px; }
+  .toolbar input::placeholder { color: var(--text2); }
+  .toolbar input:focus, .toolbar select:focus { border-color: var(--accent); }
+
+  /* ── Buttons ── */
+  .btn { padding: 8px 18px; border-radius: 8px; border: none; font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: opacity .15s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary  { background: var(--accent);  color: #fff; }
+  .btn-success  { background: var(--green);   color: #fff; }
+  .btn-danger   { background: var(--red);     color: #fff; }
+  .btn-warning  { background: var(--orange);  color: #fff; }
+  .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+  .btn-sm       { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--surface2); color: var(--text2); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .05em; padding: 12px 16px; text-align: left; }
+  td { padding: 11px 16px; border-top: 1px solid var(--border); vertical-align: middle; }
+  tr:hover td { background: rgba(59,130,246,.05); }
+  .mono { font-family: 'Courier New', monospace; font-size: 12px; color: var(--accent); }
+  .badge-status { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 700; }
+  .s-valid   { background: rgba(16,185,129,.15); color: var(--green); }
+  .s-expired { background: rgba(245,158,11,.15); color: var(--orange); }
+  .s-banned  { background: rgba(239,68,68,.15);  color: var(--red); }
+  .s-deleted { background: rgba(107,114,128,.15); color: #6b7280; }
+
+  .role-admin  { color: var(--accent2); font-weight: 700; font-size: 11px; }
+  .role-member { color: var(--text2); font-size: 11px; }
+
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 28px; width: 480px; max-width: 100%; position: relative; }
+  .modal h2 { font-size: 17px; margin-bottom: 20px; color: var(--accent); }
+  .modal .close { position: absolute; top: 16px; right: 16px; background: none; border: none;
+    color: var(--text2); font-size: 18px; cursor: pointer; }
+
+  /* ── Form ── */
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+  .form-group input, .form-group select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 14px; border-radius: 8px; font-size: 13px; outline: none;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── Device list ── */
+  .device-item { background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 12px; }
+  .device-item .did { color: var(--accent); font-family: monospace; font-size: 11px; }
+  .device-item .dlast { color: var(--text2); float: right; }
+
+  /* ── Toast ── */
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 12px 20px; border-radius: 10px; font-size: 13px;
+    transition: opacity .3s; opacity: 0; pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  #toast.show { opacity: 1; }
+  #toast.ok  { border-color: var(--green); color: var(--green); }
+  #toast.err { border-color: var(--red);   color: var(--red); }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .form-row { grid-template-columns: 1fr; }
+    .modal { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══ -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>🔐 Key Manager</h1>
+    <p>Đăng nhập để quản lý key LQ Mod</p>
+    <div class="form-group">
+      <label>Tên đăng nhập</label>
+      <input type="text" id="login-user" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>Mật khẩu</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <div id="login-err" style="color:var(--red);font-size:12px;margin-bottom:12px;display:none"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Đăng nhập</button>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app">
+  <div class="navbar">
+    <h1>🔑 Key Manager — LQ Mod</h1>
+    <span class="badge" id="admin-badge">ADMIN</span>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Đăng xuất</button>
+  </div>
+
+  <div class="container">
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card"><div class="val" id="s-total">0</div><div class="lbl">Tổng key</div></div>
+      <div class="stat-card"><div class="val" id="s-active" style="color:var(--green)">0</div><div class="lbl">Đang hoạt động</div></div>
+      <div class="stat-card"><div class="val" id="s-expired" style="color:var(--orange)">0</div><div class="lbl">Hết hạn</div></div>
+      <div class="stat-card"><div class="val" id="s-banned" style="color:var(--red)">0</div><div class="lbl">Bị ban</div></div>
+      <div class="stat-card"><div class="val" id="s-devices" style="color:var(--accent2)">0</div><div class="lbl">Thiết bị đang dùng</div></div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <input type="text" id="search-input" placeholder="🔍 Tìm key hoặc thiết bị..." oninput="renderTable()">
+      <select id="filter-status" onchange="renderTable()">
+        <option value="">Tất cả trạng thái</option>
+        <option value="valid">Hợp lệ</option>
+        <option value="expired">Hết hạn</option>
+        <option value="banned">Bị ban</option>
+      </select>
+      <select id="filter-role" onchange="renderTable()">
+        <option value="">Tất cả role</option>
+        <option value="admin">Admin</option>
+        <option value="member">Member</option>
+      </select>
+      <button class="btn btn-success" onclick="openCreateModal()">+ Tạo key mới</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportKeys()">⬇ Export JSON</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Role</th>
+            <th>Trạng thái</th>
+            <th>Còn lại</th>
+            <th>Hết hạn</th>
+            <th>Thiết bị</th>
+            <th>Giới hạn</th>
+            <th>Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="keys-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Tạo key ══ -->
+<div class="modal-overlay" id="create-modal" style="display:none">
+  <div class="modal">
+    <button class="close" onclick="closeModal('create-modal')">✕</button>
+    <h2>➕ Tạo Key Mới</h2>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Loại key</label>
+        <select id="c-type" onchange="updateDeviceLimit()">
+          <option value="single">1 thiết bị</option>
+          <option value="multi">Nhiều thiết bị</option>
+        </select>
+      </div>
+      <div class="form-group" id="c-limit-wrap" style="display:none">
+        <label>Số thiết bị tối đa</label>
+        <input type="number" id="c-limit" value="3" min="1" max="100">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Thời hạn</label>
+        <select id="c-duration" onchange="updateCustomDays()">
+          <option value="7">1 tuần (7 ngày)</option>
+          <option value="30">1 tháng (30 ngày)</option>
+          <option value="365">1 năm (365 ngày)</option>
+          <option value="custom">Tùy chỉnh...</option>
+        </select>
+      </div>
+      <div class="form-group" id="c-days-wrap" style="display:none">
+        <label>Số ngày</label>
+        <input type="number" id="c-days" value="14" min="1">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Role</label>
+      <select id="c-role">
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Ghi chú (tùy chọn)</label>
+      <input type="text" id="c-note" placeholder="Ghi chú cho key này...">
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal('create-modal')">Hủy</button>
+      <button class="btn btn-success" onclick="createKey()">Tạo key</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Devices ══ -->
+<div class="modal-overlay" id="devices-modal" style="display:none">
+  <div class="modal">
+    <button class="close" onclick="closeModal('devices-modal')">✕</button>
+    <h2>📱 Thiết bị đang dùng key</h2>
+    <div id="devices-list"></div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Gia hạn ══ -->
+<div class="modal-overlay" id="renew-modal" style="display:none">
+  <div class="modal" style="width:340px">
+    <button class="close" onclick="closeModal('renew-modal')">✕</button>
+    <h2>🔄 Gia hạn Key</h2>
+    <p style="color:var(--text2);font-size:12px;margin-bottom:16px" id="renew-key-info"></p>
+    <div class="form-group">
+      <label>Gia hạn thêm</label>
+      <select id="renew-duration">
+        <option value="7">1 tuần</option>
+        <option value="30">1 tháng</option>
+        <option value="365">1 năm</option>
+        <option value="custom">Tùy chỉnh...</option>
+      </select>
+    </div>
+    <div class="form-group" id="renew-custom-wrap" style="display:none">
+      <label>Số ngày gia hạn</label>
+      <input type="number" id="renew-custom-days" value="14" min="1">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal('renew-modal')">Hủy</button>
+      <button class="btn btn-warning" onclick="confirmRenew()">Gia hạn</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  CONFIG — Thay đổi thông tin này trước khi deploy
+// ══════════════════════════════════════════════════════
+const CONFIG = {
+  adminUser: 'admin',
+  adminPass: 'lqmod@2026',          // ĐỔI MẬT KHẨU NÀY!
+  storageKey: 'lq_keys_db',         // localStorage key
+  // Để đồng bộ với GitHub, dùng GitHub Actions + Gist API
+  // (xem README.md để setup)
+};
+
+// ── State ──────────────────────────────────────────────
+let keys = [];        // array of keyRecord
+let renewingKey = null;
+
+// ── keyRecord schema:
+// {
+//   id: uuid,
+//   key: string,
+//   role: 'admin'|'member',
+//   status: 'valid'|'expired'|'banned',
+//   maxDevices: number (1 or N),
+//   devices: [{id, lastSeen}],
+//   createdAt: ISO,
+//   expiresAt: ISO,
+//   note: string
+// }
+
+// ══════════════════════════════════════════════════════
+//  LOGIN
+// ══════════════════════════════════════════════════════
+function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (u === CONFIG.adminUser && p === CONFIG.adminPass) {
+    sessionStorage.setItem('lq_auth', '1');
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadKeys();
+  } else {
+    const el = document.getElementById('login-err');
+    el.textContent = '❌ Sai tên đăng nhập hoặc mật khẩu.';
+    el.style.display = 'block';
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('lq_auth');
+  location.reload();
+}
+
+document.getElementById('login-pass').addEventListener('keyup', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+// Check session
+if (sessionStorage.getItem('lq_auth') === '1') {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+// ══════════════════════════════════════════════════════
+//  DATA — localStorage persistence
+// ══════════════════════════════════════════════════════
+function loadKeys() {
+  try {
+    keys = JSON.parse(localStorage.getItem(CONFIG.storageKey) || '[]');
+  } catch { keys = []; }
+  checkExpired();
+  renderStats();
+  renderTable();
+}
+
+function saveKeys() {
+  localStorage.setItem(CONFIG.storageKey, JSON.stringify(keys));
+  // Export validate.json cho GitHub Pages
+  updateValidateJson();
+}
+
+function checkExpired() {
+  const now = new Date();
+  keys.forEach(k => {
+    if (k.status === 'valid' && new Date(k.expiresAt) < now) {
+      k.status = 'expired';
+    }
+  });
+}
+
+// ── Tạo file validate.json để app iOS đọc ─────────────
+function updateValidateJson() {
+  // File này sẽ được generate bởi GitHub Actions
+  // Ở đây chỉ hiển thị nút download
+  // (xem README.md để setup GitHub Actions tự động)
+}
+
+// ══════════════════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════════════════
+function renderStats() {
+  checkExpired();
+  document.getElementById('s-total').textContent   = keys.length;
+  document.getElementById('s-active').textContent  = keys.filter(k => k.status === 'valid').length;
+  document.getElementById('s-expired').textContent = keys.filter(k => k.status === 'expired').length;
+  document.getElementById('s-banned').textContent  = keys.filter(k => k.status === 'banned').length;
+  const allDevices = keys.reduce((sum, k) => sum + (k.devices?.length || 0), 0);
+  document.getElementById('s-devices').textContent = allDevices;
+}
+
+// ══════════════════════════════════════════════════════
+//  TABLE
+// ══════════════════════════════════════════════════════
+function renderTable() {
+  checkExpired();
+  const q      = document.getElementById('search-input').value.toLowerCase();
+  const fSt    = document.getElementById('filter-status').value;
+  const fRole  = document.getElementById('filter-role').value;
+
+  let filtered = keys.filter(k => {
+    const matchQ = !q ||
+      k.key.toLowerCase().includes(q) ||
+      (k.devices||[]).some(d => d.id.toLowerCase().includes(q)) ||
+      (k.note||'').toLowerCase().includes(q);
+    const matchSt   = !fSt   || k.status === fSt;
+    const matchRole = !fRole || k.role === fRole;
+    return matchQ && matchSt && matchRole;
+  });
+
+  const tbody = document.getElementById('keys-tbody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:32px">Không có key nào</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(k => {
+    const exp  = new Date(k.expiresAt);
+    const now  = new Date();
+    const days = Math.ceil((exp - now) / 86400000);
+    const daysStr = k.status === 'valid'
+      ? (days > 0 ? `${days} ngày` : 'Hết hạn')
+      : '—';
+    const expStr  = exp.toLocaleDateString('vi-VN');
+    const devCount = (k.devices||[]).length;
+    const devLimit = k.maxDevices === 1 ? '1' : `${devCount}/${k.maxDevices}`;
+
+    const stClass = {valid:'s-valid',expired:'s-expired',banned:'s-banned'}[k.status]||'s-deleted';
+    const stLabel = {valid:'✅ Hợp lệ',expired:'⏰ Hết hạn',banned:'🚫 Bị ban'}[k.status]||'Đã xóa';
+
+    return `<tr>
+      <td>
+        <span class="mono" title="${k.key}">${k.key.substring(0,20)}${k.key.length>20?'…':''}</span>
+        ${k.note ? `<br><span style="color:var(--text2);font-size:11px">${k.note}</span>` : ''}
+      </td>
+      <td><span class="${k.role==='admin'?'role-admin':'role-member'}">${k.role==='admin'?'👑 Admin':'👤 Member'}</span></td>
+      <td><span class="badge-status ${stClass}">${stLabel}</span></td>
+      <td style="color:${days>0?'var(--green)':'var(--red)'}">${daysStr}</td>
+      <td style="color:var(--text2);font-size:12px">${expStr}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="viewDevices('${k.id}')">
+          📱 ${devCount}/${k.maxDevices}
+        </button>
+      </td>
+      <td style="color:var(--text2);font-size:12px">${k.maxDevices===1?'1 máy':k.maxDevices+' máy'}</td>
+      <td>
+        <div class="actions">
+          <button class="btn btn-warning btn-sm" onclick="openRenew('${k.id}')">🔄</button>
+          ${k.status==='banned'
+            ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${k.id}')">✅</button>`
+            : `<button class="btn btn-danger btn-sm" onclick="banKey('${k.id}')">🚫</button>`}
+          <button class="btn btn-danger btn-sm" onclick="deleteKey('${k.id}')">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderStats();
+}
+
+// ══════════════════════════════════════════════════════
+//  CREATE KEY
+// ══════════════════════════════════════════════════════
+function openCreateModal() {
+  document.getElementById('create-modal').style.display = 'flex';
+}
+
+function updateDeviceLimit() {
+  const type = document.getElementById('c-type').value;
+  document.getElementById('c-limit-wrap').style.display = type === 'multi' ? 'block' : 'none';
+}
+
+function updateCustomDays() {
+  const dur = document.getElementById('c-duration').value;
+  document.getElementById('c-days-wrap').style.display = dur === 'custom' ? 'block' : 'none';
+}
+
+function generateKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const seg = () => Array.from({length:5}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  return `LQ-${seg()}-${seg()}-${seg()}-${seg()}`;
+}
+
+function createKey() {
+  const type     = document.getElementById('c-type').value;
+  const maxDev   = type === 'single' ? 1 : parseInt(document.getElementById('c-limit').value) || 3;
+  const durSel   = document.getElementById('c-duration').value;
+  const days     = durSel === 'custom'
+    ? parseInt(document.getElementById('c-days').value) || 7
+    : parseInt(durSel);
+  const role     = document.getElementById('c-role').value;
+  const note     = document.getElementById('c-note').value.trim();
+
+  const now      = new Date();
+  const expires  = new Date(now.getTime() + days * 86400000);
+
+  const record = {
+    id:         crypto.randomUUID(),
+    key:        generateKey(),
+    role,
+    status:    'valid',
+    maxDevices: maxDev,
+    devices:    [],
+    createdAt:  now.toISOString(),
+    expiresAt:  expires.toISOString(),
+    note
+  };
+
+  keys.unshift(record);
+  saveKeys();
+  renderTable();
+  closeModal('create-modal');
+  showToast(`✅ Đã tạo key: ${record.key}`, 'ok');
+}
+
+// ══════════════════════════════════════════════════════
+//  DEVICES
+// ══════════════════════════════════════════════════════
+function viewDevices(id) {
+  const k = keys.find(k => k.id === id);
+  if (!k) return;
+  const list = document.getElementById('devices-list');
+  if (!k.devices || !k.devices.length) {
+    list.innerHTML = '<p style="color:var(--text2);font-size:13px">Chưa có thiết bị nào đăng ký.</p>';
+  } else {
+    list.innerHTML = k.devices.map(d => `
+      <div class="device-item">
+        <div class="did">${d.id}</div>
+        <span class="dlast">Lần cuối: ${d.lastSeen ? new Date(d.lastSeen).toLocaleString('vi-VN') : 'Chưa rõ'}</span>
+      </div>
+    `).join('');
+  }
+  document.getElementById('devices-modal').style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════════════
+//  BAN / UNBAN / DELETE
+// ══════════════════════════════════════════════════════
+function banKey(id) {
+  if (!confirm('Bạn chắc muốn ban key này?')) return;
+  const k = keys.find(k => k.id === id);
+  if (k) { k.status = 'banned'; saveKeys(); renderTable(); showToast('🚫 Đã ban key', 'err'); }
+}
+
+function unbanKey(id) {
+  const k = keys.find(k => k.id === id);
+  if (k) {
+    k.status = new Date(k.expiresAt) > new Date() ? 'valid' : 'expired';
+    saveKeys(); renderTable(); showToast('✅ Đã gỡ ban key', 'ok');
+  }
+}
+
+function deleteKey(id) {
+  if (!confirm('Xóa key này vĩnh viễn?')) return;
+  keys = keys.filter(k => k.id !== id);
+  saveKeys(); renderTable(); showToast('🗑 Đã xóa key', 'err');
+}
+
+// ══════════════════════════════════════════════════════
+//  RENEW
+// ══════════════════════════════════════════════════════
+function openRenew(id) {
+  renewingKey = id;
+  const k = keys.find(k => k.id === id);
+  document.getElementById('renew-key-info').textContent =
+    `Key: ${k.key.substring(0,20)}... | Hết hạn: ${new Date(k.expiresAt).toLocaleDateString('vi-VN')}`;
+  document.getElementById('renew-modal').style.display = 'flex';
+  document.getElementById('renew-duration').onchange = function() {
+    document.getElementById('renew-custom-wrap').style.display =
+      this.value === 'custom' ? 'block' : 'none';
+  };
+}
+
+function confirmRenew() {
+  const k = keys.find(k => k.id === renewingKey);
+  if (!k) return;
+  const durSel = document.getElementById('renew-duration').value;
+  const days   = durSel === 'custom'
+    ? parseInt(document.getElementById('renew-custom-days').value) || 7
+    : parseInt(durSel);
+
+  const base = new Date(k.expiresAt) > new Date() ? new Date(k.expiresAt) : new Date();
+  k.expiresAt = new Date(base.getTime() + days * 86400000).toISOString();
+  if (k.status === 'expired') k.status = 'valid';
+
+  saveKeys(); renderTable(); closeModal('renew-modal');
+  showToast(`🔄 Đã gia hạn thêm ${days} ngày`, 'ok');
+}
+
+// ══════════════════════════════════════════════════════
+//  EXPORT
+// ══════════════════════════════════════════════════════
+function exportKeys() {
+  // Export file validate.json mà iOS app đọc
+  const validateData = {};
+  keys.forEach(k => {
+    if (k.status === 'banned' || k.status === 'deleted') return;
+    const now     = new Date();
+    const expired = new Date(k.expiresAt) < now;
+    validateData[k.key] = {
+      status:     k.status,
+      role:       k.role,
+      maxDevices: k.maxDevices,
+      expiresAt:  k.expiresAt,
+      days_left:  Math.max(0, Math.ceil((new Date(k.expiresAt) - now) / 86400000))
+    };
+  });
+
+  const blob = new Blob([JSON.stringify({keys: validateData, updated: new Date().toISOString()}, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'validate.json';
+  a.click();
+  showToast('⬇ Đã xuất validate.json — upload vào /api/ trên GitHub', 'ok');
+}
+
+// ══════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════
+function closeModal(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+function showToast(msg, type = 'ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => t.className = '', 3000);
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => {
+    if (e.target === el) el.style.display = 'none';
+  });
+});
+
+// Init
+loadKeys();
+
+// ══════════════════════════════════════════════════════
+//  API VALIDATE ENDPOINT (Simulated for GitHub Pages)
+//  Thực tế: dùng Cloudflare Workers hoặc Vercel Edge
+// ══════════════════════════════════════════════════════
+// Xem README.md để biết cách setup validate endpoint thật
+</script>
+</body>
+</html>
