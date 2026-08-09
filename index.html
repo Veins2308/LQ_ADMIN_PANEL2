@@ -298,6 +298,7 @@
     <!-- Toolbar -->
     <div class="toolbar">
       <button class="btn btn-success" onclick="openCreateModal()">+ Tạo key mới</button>
+      <button class="btn btn-info btn-sm" onclick="openBannerModal()">🎨 Cài đặt Banner</button>
       <button class="btn btn-ghost btn-sm" onclick="loadAllKeys()">🔄 Làm mới</button>
       <input type="text" id="search-box" placeholder="🔍 Tìm key, ghi chú, role..." oninput="filterTable()">
       <select id="filter-status" onchange="filterTable()">
@@ -561,6 +562,106 @@
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="closeModal('editrole-modal')">Hủy</button>
       <button class="btn btn-warning" id="editrole-btn" onclick="confirmEditRole()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ MODAL: Banner Settings ══ -->
+<div class="modal-overlay" id="banner-modal" style="display:none">
+  <div class="modal" style="width:min(640px,95vw);max-height:90vh;overflow-y:auto">
+    <button class="close" onclick="closeModal('banner-modal')">✕</button>
+    <h2>🎨 Cài đặt Banner & Giao diện</h2>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">
+      Các thay đổi này sẽ được lưu vào Cloudflare KV và được đọc bởi source LQ_OBJ khi cần.
+    </div>
+
+    <!-- Banner Text Settings -->
+    <div style="margin-bottom:20px;padding:16px;background:var(--surface2);border-radius:12px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:14px">📝 CHỮ TRÊN BANNER</div>
+      <div class="form-group">
+        <label>Tiêu đề banner (ví dụ: LQMB MENU VIP)</label>
+        <input type="text" id="banner-title" placeholder="LQMB MENU VIP" maxlength="50">
+      </div>
+      <div class="form-group">
+        <label>Credit (ví dụ: CREDIT: VEINS X LETIENDAT)</label>
+        <input type="text" id="banner-credit" placeholder="CREDIT: VEINS X LETIENDAT" maxlength="60">
+      </div>
+      <div class="form-group">
+        <label>Dòng phụ 1 (ví dụ: MƯỜI GIỜ KÉM BẢY)</label>
+        <input type="text" id="banner-sub1" placeholder="MƯỜI GIỜ KÉM BẢY" maxlength="60">
+      </div>
+      <div class="form-group">
+        <label>Dòng phụ 2 (ví dụ: ANTIBAN ĐẾN KHI BỊ BAN !)</label>
+        <input type="text" id="banner-sub2" placeholder="ANTIBAN ĐẾN KHI BỊ BAN !" maxlength="60">
+      </div>
+    </div>
+
+    <!-- Image URLs Settings -->
+    <div style="margin-bottom:20px;padding:16px;background:var(--surface2);border-radius:12px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:14px">🖼️ ẢNH GIAO DIỆN <span style="font-size:10px;color:var(--orange);font-weight:400">(chỉ Admin mới đổi được trong app)</span></div>
+      <div class="form-group">
+        <label>URL ảnh nút Floating Button</label>
+        <input type="text" id="img-float-btn" placeholder="https://cdn.phototourl.com/...">
+      </div>
+      <div class="form-group">
+        <label>URL ảnh nhân vật trên Banner</label>
+        <input type="text" id="img-banner-char" placeholder="https://cdn.phototourl.com/...">
+      </div>
+      <div class="form-group">
+        <label>URL ảnh nền trang trí TRÁI (BG_IMG1)</label>
+        <input type="text" id="img-bg1" placeholder="https://cdn.phototourl.com/...">
+      </div>
+      <div class="form-group">
+        <label>URL ảnh nền trang trí PHẢI (BG_IMG2)</label>
+        <input type="text" id="img-bg2" placeholder="https://cdn.phototourl.com/...">
+      </div>
+    </div>
+
+    <!-- Color Settings -->
+    <div style="margin-bottom:20px;padding:16px;background:var(--surface2);border-radius:12px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px">🎨 MÀU SẮC MENU <span style="font-size:10px;color:var(--orange);font-weight:400">(chỉ Admin mới đổi được trong app)</span></div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:14px">Nhập mã màu HEX cho 2 màu gradient chính của menu (màu 1 → màu 2)</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="form-group" style="flex:1;min-width:140px">
+          <label>Màu chính 1 (hex)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="color1-picker" value="#EB5A96" style="width:44px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer" oninput="syncColorInput('color1')">
+            <input type="text" id="color1-hex" value="#EB5A96" placeholder="#EB5A96" maxlength="7" style="flex:1" oninput="syncColorPicker('color1')">
+          </div>
+        </div>
+        <div class="form-group" style="flex:1;min-width:140px">
+          <label>Màu chính 2 (hex)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="color" id="color2-picker" value="#D4579A" style="width:44px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer" oninput="syncColorInput('color2')">
+            <input type="text" id="color2-hex" value="#D4579A" placeholder="#D4579A" maxlength="7" style="flex:1" oninput="syncColorPicker('color2')">
+          </div>
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Góc nghiêng gradient (0° = ngang, 90° = dọc, 135° = chéo)</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="range" id="gradient-angle" min="0" max="360" value="135" style="flex:1" oninput="document.getElementById('angle-val').textContent=this.value+'°'">
+          <span id="angle-val" style="font-size:13px;font-weight:700;color:var(--accent);min-width:40px">135°</span>
+        </div>
+      </div>
+      <!-- Preview -->
+      <div style="margin-top:12px">
+        <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:6px">Xem trước gradient:</label>
+        <div id="gradient-preview" style="height:48px;border-radius:10px;transition:background 0.3s"></div>
+      </div>
+      <div style="margin-top:8px">
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Màu nút bấm (hex)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="btn-color-picker" value="#E09EC3" style="width:44px;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer" oninput="syncColorInput('btn-color')">
+          <input type="text" id="btn-color-hex" value="#E09EC3" placeholder="#E09EC3" maxlength="7" style="flex:1" oninput="syncColorPicker('btn-color')">
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal('banner-modal')">Hủy</button>
+      <button class="btn btn-success" onclick="saveBannerSettings()">💾 Lưu cài đặt</button>
     </div>
   </div>
 </div>
@@ -1019,21 +1120,36 @@ const FEATURE_GROUPS = [
     { title:'MAIN', features:['Map sáng','Vẽ ESP','Vẽ line','Hiển thị tổng số địch','Vẽ box',
         'Hiển thị khoảng cách tới địch','Hiển thị máu địch','Bỏ qua vẽ địch đã hiển thị','Hiển thị tên tướng địch'] },
     { title:'THÔNG TIN ĐỊCH', features:['Hiển thị thông tin team địch','Trạng thái chiêu cuối team địch',
-        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'] }
+        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'] },
+    { title:'ĐỔI TÊN PLAYER', features:['Đổi tên player','Tên tuỳ chỉnh'] }
   ]},
   { tab:'AIMBOT', sections:[
-    { title:'AIMBOT', features:['Aimbot','Chiêu 1','Chiêu 2','Chiêu 3'] }
+    { title:'AIMBOT', features:['Aimbot','Chiêu 1','Chiêu 2','Chiêu 3',
+        'Khoảng cách Aimbot','Độ nhạy khoá mục tiêu','Kiểu Aimbot','Vẽ tia'] }
   ]},
   { tab:'AUTO', sections:[
     { title:'AUTO', features:['Auto mua đồ (Món đầu đề cử)','Auto bán mua đồ nhanh'] },
+    { title:'ĐỒ AUTO BÁN/MUA', features:['Phù hiệu Tàn Nhẫn','Giáp Odin','Giáp Thần Vệ Binh',
+        'Giày Tốc Chiến','Nỏ Thần','Gương Tà Dị','Trang Phục Hào Quang','Nhẫn Thần Thánh'] },
     { title:'TRỪNG TRỊ / BỘC PHÁ', features:['Auto trừng trị','Chỉ trừng trị Rồng và Tà Thần',
-        'Auto bộc phá','Auto băng sương','Auto hồi máu','Auto cấp cứu'] }
+        'Auto bộc phá','%HP Bộc phá','Auto băng sương','%HP Băng sương',
+        'Auto hồi máu','%HP Hồi máu','Auto cấp cứu','%HP Cấp cứu','RESET VỀ MẶC ĐỊNH'] }
   ]},
   { tab:'MOD SKIN', sections:[
-    { title:'MOD SKIN', features:['Mod rank','Mở khoá tất cả skin','Mod nút bấm','Mod thông báo diệt'] }
+    { title:'MOD RANK', features:['Mod rank','Rank','Số sao','Số ấn','Top rank','Cục'] },
+    { title:'MOD SKIN', features:['Mở khoá tất cả skin','Mod nút bấm','Chế độ nút bấm','Chọn skin nút',
+        'Mod thông báo diệt','Chế độ thông báo diệt','Chọn thông báo diệt'] }
+  ]},
+  { tab:'KILL NOTIFY', sections:[
+    { title:'TEXT KILL NOTIFY', features:[
+        'Chiến công đầu','Hạ','Double Kill','Triple Kill','Quata Kill',
+        'Penta Kill','Gotcha','Truyền thuyết','Huyền thoại','Thần thánh',
+        'Phá trụ địch','Quét sạch','Chấm dứt','Lính siêu cấp',
+        'Ceasar','Ceasar hắc ám','Ceasar bạo chúa','Rồng','Rồng ánh sáng'
+    ]}
   ]},
   { tab:'OTHER', sections:[
-    { title:'KHÁC', features:['Ẩn UID','Xem lịch sử đấu người khác (Đểu)'] }
+    { title:'KHÁC', features:['Ẩn UID','Xem lịch sử đấu người khác (Đểu)','LƯU SETTING','ĐĂNG XUẤT ACCOUNT'] }
   ]}
 ];
 
@@ -1313,6 +1429,99 @@ function showToast(msg, type = 'ok') {
   t.className = `show ${type}`;
   setTimeout(() => t.className = '', 3500);
 }
+
+
+// ════════════════════════════════════════════════════════
+//  BANNER SETTINGS
+// ════════════════════════════════════════════════════════
+
+function updateGradientPreview() {
+  const c1 = document.getElementById('color1-hex').value || '#EB5A96';
+  const c2 = document.getElementById('color2-hex').value || '#D4579A';
+  const angle = document.getElementById('gradient-angle').value || 135;
+  document.getElementById('gradient-preview').style.background =
+    `linear-gradient(${angle}deg, ${c1}, ${c2})`;
+}
+
+function syncColorInput(id) {
+  const picker = document.getElementById(id + '-picker');
+  const hex = document.getElementById(id + '-hex');
+  hex.value = picker.value;
+  updateGradientPreview();
+}
+
+function syncColorPicker(id) {
+  const picker = document.getElementById(id + '-picker');
+  const hex = document.getElementById(id + '-hex');
+  if (/^#[0-9a-fA-F]{6}$/.test(hex.value)) {
+    picker.value = hex.value;
+    updateGradientPreview();
+  }
+}
+
+async function openBannerModal() {
+  // Load current settings from KV
+  try {
+    const r = await fetch('/api/admin/getconfig', { headers: { 'x-admin-key': adminToken } });
+    if (r.ok) {
+      const d = await r.json();
+      const cfg = d.banner_config || {};
+      document.getElementById('banner-title').value = cfg.title || 'LQMB MENU VIP';
+      document.getElementById('banner-credit').value = cfg.credit || 'CREDIT: VEINS X LETIENDAT';
+      document.getElementById('banner-sub1').value = cfg.sub1 || 'MƯỜI GIỜ KÉM BẢY';
+      document.getElementById('banner-sub2').value = cfg.sub2 || 'ANTIBAN ĐẾN KHI BỊ BAN !';
+      document.getElementById('img-float-btn').value = cfg.img_float_btn || '';
+      document.getElementById('img-banner-char').value = cfg.img_banner_char || '';
+      document.getElementById('img-bg1').value = cfg.img_bg1 || '';
+      document.getElementById('img-bg2').value = cfg.img_bg2 || '';
+      document.getElementById('color1-hex').value = cfg.color1 || '#EB5A96';
+      document.getElementById('color1-picker').value = cfg.color1 || '#EB5A96';
+      document.getElementById('color2-hex').value = cfg.color2 || '#D4579A';
+      document.getElementById('color2-picker').value = cfg.color2 || '#D4579A';
+      document.getElementById('btn-color-hex').value = cfg.btn_color || '#E09EC3';
+      document.getElementById('btn-color-picker').value = cfg.btn_color || '#E09EC3';
+      document.getElementById('gradient-angle').value = cfg.gradient_angle || 135;
+      document.getElementById('angle-val').textContent = (cfg.gradient_angle || 135) + '°';
+    }
+  } catch(e) {}
+  updateGradientPreview();
+  document.getElementById('banner-modal').style.display = 'flex';
+}
+
+async function saveBannerSettings() {
+  const cfg = {
+    title:          document.getElementById('banner-title').value.trim(),
+    credit:         document.getElementById('banner-credit').value.trim(),
+    sub1:           document.getElementById('banner-sub1').value.trim(),
+    sub2:           document.getElementById('banner-sub2').value.trim(),
+    img_float_btn:  document.getElementById('img-float-btn').value.trim(),
+    img_banner_char:document.getElementById('img-banner-char').value.trim(),
+    img_bg1:        document.getElementById('img-bg1').value.trim(),
+    img_bg2:        document.getElementById('img-bg2').value.trim(),
+    color1:         document.getElementById('color1-hex').value.trim(),
+    color2:         document.getElementById('color2-hex').value.trim(),
+    btn_color:      document.getElementById('btn-color-hex').value.trim(),
+    gradient_angle: parseInt(document.getElementById('gradient-angle').value),
+  };
+  try {
+    const r = await fetch('/api/admin/setconfig', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-key': adminToken },
+      body: JSON.stringify({ banner_config: cfg })
+    });
+    if (!r.ok) throw new Error('Lỗi lưu config');
+    showToast('✅ Đã lưu cài đặt Banner & Màu sắc', 'ok');
+    closeModal('banner-modal');
+  } catch(e) {
+    showToast(`❌ ${e.message}`, 'err');
+  }
+}
+
+// Auto update gradient preview when angle changes
+document.addEventListener('DOMContentLoaded', () => {
+  const angleEl = document.getElementById('gradient-angle');
+  if (angleEl) angleEl.addEventListener('input', updateGradientPreview);
+});
 
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => {
