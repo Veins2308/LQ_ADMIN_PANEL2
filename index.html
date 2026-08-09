@@ -51,10 +51,10 @@
     max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
-  .container { max-width: 1200px; margin: 0 auto; padding: 24px 20px; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
 
   /* ── Stats ── */
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 16px; margin-bottom: 28px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 16px; margin-bottom: 28px; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
   .stat-card .val { font-size: 28px; font-weight: 700; color: var(--accent); }
   .stat-card .lbl { font-size: 12px; color: var(--text2); margin-top: 4px; }
@@ -77,6 +77,7 @@
   .btn-success  { background: var(--green);   color: #fff; }
   .btn-danger   { background: var(--red);     color: #fff; }
   .btn-warning  { background: var(--orange);  color: #fff; }
+  .btn-info     { background: var(--accent2); color: #fff; }
   .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--text2); }
   .btn-sm       { padding: 5px 11px; font-size: 12px; border-radius: 6px; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -86,7 +87,7 @@
     border-radius: var(--radius); }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { background: var(--surface2); color: var(--text2); font-size: 11px; text-transform: uppercase;
-    letter-spacing: .05em; padding: 12px 16px; text-align: left; }
+    letter-spacing: .05em; padding: 12px 16px; text-align: left; white-space: nowrap; }
   td { padding: 11px 16px; border-top: 1px solid var(--border); vertical-align: middle; }
   tr:hover td { background: rgba(59,130,246,.05); }
   .mono { font-family: 'Courier New', monospace; font-size: 12px; color: var(--accent); }
@@ -99,6 +100,16 @@
   .role-admin  { color: var(--accent2); font-weight: 700; font-size: 11px; }
   .role-member { color: var(--text2); font-size: 11px; }
 
+  /* Device count badge */
+  .dev-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 6px; font-size: 11px;
+    cursor: pointer; transition: border-color .15s;
+  }
+  .dev-badge:hover { border-color: var(--accent); color: var(--accent); }
+  .dev-badge .count { font-weight: 700; color: var(--accent); }
+
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
   /* ── Modal ── */
@@ -107,7 +118,7 @@
     display: flex; align-items: center; justify-content: center; padding: 20px;
   }
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    padding: 28px; width: 480px; max-width: 100%; position: relative; }
+    padding: 28px; width: 500px; max-width: 100%; position: relative; max-height: 90vh; overflow-y: auto; }
   .modal h2 { font-size: 17px; margin-bottom: 20px; color: var(--accent); }
   .modal .close { position: absolute; top: 16px; right: 16px; background: none; border: none;
     color: var(--text2); font-size: 18px; cursor: pointer; }
@@ -115,18 +126,43 @@
   /* ── Form ── */
   .form-group { margin-bottom: 16px; }
   .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
-  .form-group input, .form-group select {
+  .form-group input, .form-group select, .form-group textarea {
     width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
     padding: 9px 14px; border-radius: 8px; font-size: 13px; outline: none;
   }
   .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+  /* Custom key section */
+  .key-section {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-bottom: 16px;
+  }
+  .key-section-title { font-size: 12px; color: var(--text2); margin-bottom: 10px; font-weight: 600; }
+  .key-preview {
+    font-family: 'Courier New', monospace; font-size: 13px;
+    color: var(--accent); background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.3); padding: 8px 12px;
+    border-radius: 6px; word-break: break-all; min-height: 36px;
+    display: flex; align-items: center;
+  }
+  .key-mode-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .key-mode-tab {
+    padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); color: var(--text2);
+    background: transparent; transition: all .15s;
+  }
+  .key-mode-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
   /* ── Device list ── */
-  .device-item { background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 12px; }
-  .device-item .did { color: var(--accent); font-family: monospace; font-size: 11px; }
-  .device-item .dlast { color: var(--text2); }
+  .device-item {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; font-size: 12px;
+  }
+  .device-item .did { color: var(--accent); font-family: monospace; font-size: 11px; word-break: break-all; }
+  .device-item .dlast { color: var(--text2); margin-top: 4px; }
+  .device-item .dfirst { color: var(--text2); }
+  .device-empty { color: var(--text2); text-align: center; padding: 20px; }
 
   /* ── Info box ── */
   .info-box {
@@ -195,7 +231,7 @@
              autocomplete="off">
     </div>
     <div class="form-group">
-      <label>🔑 Admin Token (ADMIN_TOKEN trong Cloudflare) <span style="color:var(--red)">*</span></label>
+      <label>🔑 Admin Token <span style="color:var(--red)">*</span></label>
       <input type="password" id="login-admin-token" placeholder="your-secret-admin-token-here" autocomplete="off">
     </div>
 
@@ -220,16 +256,29 @@
       <div class="stat-card"><div class="val" id="s-active" style="color:var(--green)">—</div><div class="lbl">Đang hoạt động</div></div>
       <div class="stat-card"><div class="val" id="s-expired" style="color:var(--orange)">—</div><div class="lbl">Hết hạn</div></div>
       <div class="stat-card"><div class="val" id="s-banned" style="color:var(--red)">—</div><div class="lbl">Bị ban</div></div>
+      <div class="stat-card"><div class="val" id="s-devices" style="color:var(--accent2)">—</div><div class="lbl">Thiết bị đăng nhập</div></div>
     </div>
 
     <!-- Toolbar -->
     <div class="toolbar">
       <button class="btn btn-success" onclick="openCreateModal()">+ Tạo key mới</button>
       <button class="btn btn-ghost btn-sm" onclick="loadAllKeys()">🔄 Làm mới</button>
+      <input type="text" id="search-box" placeholder="🔍 Tìm key, ghi chú, role..." oninput="filterTable()">
+      <select id="filter-status" onchange="filterTable()">
+        <option value="">Tất cả trạng thái</option>
+        <option value="valid">Hợp lệ</option>
+        <option value="expired">Hết hạn</option>
+        <option value="banned">Bị ban</option>
+      </select>
+      <select id="filter-role" onchange="filterTable()">
+        <option value="">Tất cả role</option>
+        <option value="admin">Admin</option>
+        <option value="member">Member</option>
+      </select>
     </div>
 
     <div class="info-box">
-      ℹ️ Tất cả key được lưu trực tiếp trên <strong>Cloudflare KV</strong>. Khi tạo key ở đây → iOS app validate ngay lập tức — không cần export hay upload thêm bước nào.
+      ℹ️ Tất cả key lưu trực tiếp trên <strong>Cloudflare KV</strong>. Cột <strong>Thiết bị</strong> hiển thị số máy đang dùng key — click để xem chi tiết ID thiết bị.
     </div>
 
     <!-- Table -->
@@ -238,22 +287,23 @@
         <thead>
           <tr>
             <th>Key</th>
+            <th>Tên / Ghi chú</th>
             <th>Role</th>
             <th>Trạng thái</th>
+            <th>Thiết bị</th>
             <th>Còn lại</th>
             <th>Hết hạn</th>
-            <th>Ghi chú</th>
             <th>Thao tác</th>
           </tr>
         </thead>
         <tbody id="keys-tbody">
-          <tr><td colspan="7" style="text-align:center;color:var(--text2);padding:32px">Đang tải...</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--text2);padding:32px">Đang tải...</td></tr>
         </tbody>
       </table>
     </div>
 
     <p style="color:var(--text2);font-size:12px;margin-top:12px">
-      ⚠️ Danh sách key được tải trực tiếp từ Cloudflare KV thông qua Admin API.
+      ⚠️ Danh sách key tải trực tiếp từ Cloudflare KV thông qua Admin API.
     </p>
   </div>
 </div>
@@ -263,6 +313,34 @@
   <div class="modal">
     <button class="close" onclick="closeModal('create-modal')">✕</button>
     <h2>➕ Tạo Key Mới</h2>
+
+    <!-- Key name section -->
+    <div class="key-section">
+      <div class="key-section-title">🔑 Key name</div>
+      <div class="key-mode-tabs">
+        <button class="key-mode-tab active" id="tab-auto" onclick="setKeyMode('auto')">Tự động tạo</button>
+        <button class="key-mode-tab" id="tab-custom" onclick="setKeyMode('custom')">Tùy chỉnh tên</button>
+      </div>
+
+      <!-- Auto -->
+      <div id="auto-key-section">
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="key-preview" id="key-preview-display">—</div>
+          <button class="btn btn-ghost btn-sm" onclick="refreshPreviewKey()" title="Tạo key mới">↺</button>
+        </div>
+        <p style="color:var(--text2);font-size:11px;margin-top:6px">Key sẽ được tạo ngẫu nhiên dạng LQ-XXXXX-XXXXX-XXXXX-XXXXX</p>
+      </div>
+
+      <!-- Custom -->
+      <div id="custom-key-section" style="display:none">
+        <div class="form-group" style="margin-bottom:8px">
+          <input type="text" id="c-custom-key" placeholder="Nhập tên key tùy ý (vd: ADMIN-VIP hoặc LQ-MYKEY-2025)"
+            oninput="updateCustomKeyPreview()" style="font-family:monospace;text-transform:uppercase">
+        </div>
+        <div class="key-preview" id="custom-key-preview">—</div>
+        <p style="color:var(--text2);font-size:11px;margin-top:6px">Tên key tùy chỉnh (chỉ dùng A-Z, 0-9, dấu gạch ngang)</p>
+      </div>
+    </div>
 
     <div class="form-row">
       <div class="form-group">
@@ -294,22 +372,23 @@
       </div>
     </div>
 
-    <div class="form-group">
-      <label>Role</label>
-      <select id="c-role">
-        <option value="member">Member</option>
-        <option value="admin">Admin</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>Ghi chú (tùy chọn)</label>
-      <input type="text" id="c-note" placeholder="Ghi chú cho key này...">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Role</label>
+        <select id="c-role">
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Ghi chú / Tên người dùng</label>
+        <input type="text" id="c-note" placeholder="Ghi chú hoặc tên người dùng...">
+      </div>
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
       <button class="btn btn-ghost" onclick="closeModal('create-modal')">Hủy</button>
-      <button class="btn btn-success" id="create-btn" onclick="createKey()">Tạo key</button>
+      <button class="btn btn-success" id="create-btn" onclick="createKey()">✅ Tạo key</button>
     </div>
   </div>
 </div>
@@ -319,6 +398,7 @@
   <div class="modal">
     <button class="close" onclick="closeModal('devices-modal')">✕</button>
     <h2>📱 Thiết bị đang dùng key</h2>
+    <div id="devices-key-info" style="color:var(--text2);font-size:12px;margin-bottom:16px;font-family:monospace"></div>
     <div id="devices-list"></div>
   </div>
 </div>
@@ -352,39 +432,36 @@
 <div id="toast"></div>
 
 <script>
-// ══════════════════════════════════════════════════════
-//  CONFIG — Thay đổi tài khoản admin tại đây
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════════════════
 const CONFIG = {
   adminUser: 'admin',
-  adminPass: 'lqmod@2026',   // ĐỔI MẬT KHẨU NÀY!
+  adminPass: 'lqmod@2026',
 };
 
 // ── State ──────────────────────────────────────────────
-let WORKER_URL   = '';   // URL Cloudflare Worker
-let ADMIN_TOKEN  = '';   // X-Admin-Token
-let keys         = [];   // cache danh sách key hiện tại
-let renewingKey  = null;
+let WORKER_URL  = '';
+let ADMIN_TOKEN = '';
+let keys        = [];
+let filteredKeys = [];
+let renewingKey = null;
+let keyMode     = 'auto';   // 'auto' | 'custom'
+let pendingAutoKey = '';
 
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
 //  WORKER API HELPERS
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
 async function apiGet(path) {
-  const r = await fetch(WORKER_URL + path, {
-    headers: { 'X-Admin-Token': ADMIN_TOKEN }
-  });
+  const r = await fetch(WORKER_URL + path, { headers: { 'X-Admin-Token': ADMIN_TOKEN } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
 
 async function apiPost(path, body) {
   const r = await fetch(WORKER_URL + path, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'X-Admin-Token': ADMIN_TOKEN
-    },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': ADMIN_TOKEN },
     body: JSON.stringify(body)
   });
   if (!r.ok) {
@@ -394,10 +471,9 @@ async function apiPost(path, body) {
   return r.json();
 }
 
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
 //  LOGIN / LOGOUT
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
 function doLogin() {
   const u   = document.getElementById('login-user').value.trim();
   const p   = document.getElementById('login-pass').value;
@@ -407,16 +483,13 @@ function doLogin() {
   const err = document.getElementById('login-err');
 
   err.style.display = 'none';
-
   if (u !== CONFIG.adminUser || p !== CONFIG.adminPass) {
     err.textContent = '❌ Sai tên đăng nhập hoặc mật khẩu.';
-    err.style.display = 'block';
-    return;
+    err.style.display = 'block'; return;
   }
   if (!url || !tok) {
     err.textContent = '❌ Vui lòng nhập Worker URL và Admin Token.';
-    err.style.display = 'block';
-    return;
+    err.style.display = 'block'; return;
   }
 
   WORKER_URL  = url;
@@ -425,30 +498,22 @@ function doLogin() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>Đang kiểm tra kết nối...';
 
-  // Test kết nối bằng cách gọi /api/admin/list
-  fetch(WORKER_URL + '/api/admin/list', {
-    headers: { 'X-Admin-Token': ADMIN_TOKEN }
-  })
+  fetch(WORKER_URL + '/api/admin/list', { headers: { 'X-Admin-Token': ADMIN_TOKEN } })
   .then(async r => {
     btn.disabled = false;
     btn.textContent = 'Đăng nhập & Kiểm tra kết nối';
-
     if (r.status === 401) {
-      err.textContent = '❌ Admin Token sai! Kiểm tra lại ADMIN_TOKEN trong Cloudflare.';
-      err.style.display = 'block';
-      return;
+      err.textContent = '❌ Admin Token sai! Kiểm tra lại trong Cloudflare.';
+      err.style.display = 'block'; return;
     }
     if (!r.ok && r.status !== 404) {
-      err.textContent = `❌ Không kết nối được Worker (HTTP ${r.status}). Kiểm tra lại URL.`;
-      err.style.display = 'block';
-      return;
+      err.textContent = `❌ Không kết nối được Worker (HTTP ${r.status}).`;
+      err.style.display = 'block'; return;
     }
-
-    // Lưu session
     sessionStorage.setItem('lq_auth', JSON.stringify({ url, tok }));
     showApp();
   })
-  .catch(e => {
+  .catch(() => {
     btn.disabled = false;
     btn.textContent = 'Đăng nhập & Kiểm tra kết nối';
     err.textContent = '❌ Không kết nối được Worker. Kiểm tra URL và CORS.';
@@ -468,14 +533,9 @@ function showApp() {
   loadAllKeys();
 }
 
-document.getElementById('login-pass').addEventListener('keyup', e => {
-  if (e.key === 'Enter') doLogin();
-});
-document.getElementById('login-admin-token').addEventListener('keyup', e => {
-  if (e.key === 'Enter') doLogin();
-});
+document.getElementById('login-pass').addEventListener('keyup', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-admin-token').addEventListener('keyup', e => { if (e.key === 'Enter') doLogin(); });
 
-// Khôi phục session
 const _saved = sessionStorage.getItem('lq_auth');
 if (_saved) {
   try {
@@ -486,87 +546,110 @@ if (_saved) {
   } catch {}
 }
 
-// ══════════════════════════════════════════════════════
-//  LOAD KEYS từ Cloudflare KV
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
+//  LOAD KEYS
+// ════════════════════════════════════════════════════════
 async function loadAllKeys() {
   const tbody = document.getElementById('keys-tbody');
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:32px"><span class="spinner"></span>Đang tải key từ Cloudflare...</td></tr>`;
-
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:32px"><span class="spinner"></span>Đang tải key từ Cloudflare...</td></tr>`;
   try {
     const data = await apiGet('/api/admin/list');
     keys = data.keys || [];
+    filteredKeys = [...keys];
     renderTable();
     renderStats();
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:32px">
-      ❌ Không tải được danh sách key: ${e.message}<br>
-      <small style="color:var(--text2)">Cần thêm endpoint /api/admin/list vào Cloudflare Worker (xem hướng dẫn bên dưới)</small>
-    </td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:32px">❌ Không tải được: ${e.message}</td></tr>`;
   }
 }
 
-// ══════════════════════════════════════════════════════
-//  STATS
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+//  FILTER
+// ════════════════════════════════════════════════════════
+function filterTable() {
+  const q      = document.getElementById('search-box').value.toLowerCase();
+  const status = document.getElementById('filter-status').value;
+  const role   = document.getElementById('filter-role').value;
+  const now    = new Date();
 
+  filteredKeys = keys.filter(k => {
+    const effStatus = (k.status === 'valid' && new Date(k.expiresAt) < now) ? 'expired' : k.status;
+    const matchQ = !q || k.key.toLowerCase().includes(q) || (k.note||'').toLowerCase().includes(q) || (k.role||'').includes(q);
+    const matchS = !status || effStatus === status;
+    const matchR = !role   || k.role === role;
+    return matchQ && matchS && matchR;
+  });
+  renderTable();
+}
+
+// ════════════════════════════════════════════════════════
+//  STATS
+// ════════════════════════════════════════════════════════
 function renderStats() {
-  const now = new Date();
+  const now     = new Date();
   const active  = keys.filter(k => k.status === 'valid' && new Date(k.expiresAt) > now).length;
   const expired = keys.filter(k => k.status === 'expired' || (k.status === 'valid' && new Date(k.expiresAt) <= now)).length;
   const banned  = keys.filter(k => k.status === 'banned').length;
+  // Tổng số thiết bị duy nhất đang đăng nhập (trên tất cả key hợp lệ)
+  const deviceSet = new Set();
+  keys.filter(k => k.status === 'valid' && new Date(k.expiresAt) > now)
+      .forEach(k => (k.devices||[]).forEach(d => deviceSet.add(d.id)));
 
   document.getElementById('s-total').textContent   = keys.length;
   document.getElementById('s-active').textContent  = active;
   document.getElementById('s-expired').textContent = expired;
   document.getElementById('s-banned').textContent  = banned;
+  document.getElementById('s-devices').textContent = deviceSet.size;
 }
 
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
 //  TABLE
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
 function renderTable() {
   const tbody = document.getElementById('keys-tbody');
-
-  if (!keys.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:32px">Chưa có key nào. Nhấn "+ Tạo key mới" để bắt đầu.</td></tr>`;
+  if (!filteredKeys.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:32px">Không tìm thấy key nào.</td></tr>`;
     return;
   }
-
   const now = new Date();
-
-  tbody.innerHTML = keys.map(k => {
-    const exp     = new Date(k.expiresAt);
-    const days    = Math.ceil((exp - now) / 86400000);
-    const expired = exp < now;
+  tbody.innerHTML = filteredKeys.map(k => {
+    const exp       = new Date(k.expiresAt);
+    const days      = Math.ceil((exp - now) / 86400000);
+    const expired   = exp < now;
     const effStatus = (k.status === 'valid' && expired) ? 'expired' : k.status;
+    const daysStr   = effStatus === 'valid' ? `${days} ngày` : '—';
+    const expStr    = exp.toLocaleDateString('vi-VN');
+    const stClass   = {valid:'s-valid', expired:'s-expired', banned:'s-banned'}[effStatus] || 's-deleted';
+    const stLabel   = {valid:'✅ Hợp lệ', expired:'⏰ Hết hạn', banned:'🚫 Bị ban'}[effStatus] || '—';
 
-    const daysStr  = effStatus === 'valid' ? `${days} ngày` : '—';
-    const expStr   = exp.toLocaleDateString('vi-VN');
-    const stClass  = {valid:'s-valid', expired:'s-expired', banned:'s-banned'}[effStatus] || 's-deleted';
-    const stLabel  = {valid:'✅ Hợp lệ', expired:'⏰ Hết hạn', banned:'🚫 Bị ban'}[effStatus] || '—';
+    const devCount  = (k.devices || []).length;
+    const maxDev    = k.maxDevices || 1;
+    const devColor  = devCount >= maxDev ? 'var(--red)' : 'var(--accent)';
 
-    // Hiển thị key (full, có thể copy)
-    const keyDisplay = k.key;
+    // Escape key for onclick
+    const keyEsc = k.key.replace(/'/g, "\\'");
 
     return `<tr>
       <td>
-        <span class="mono" title="Click để copy" style="cursor:pointer" onclick="copyText('${k.key}')">${keyDisplay}</span>
+        <span class="mono" title="Click để copy" style="cursor:pointer" onclick="copyText('${keyEsc}')">${k.key}</span>
       </td>
+      <td style="color:var(--text2);font-size:12px">${k.note || '—'}</td>
       <td><span class="${k.role==='admin'?'role-admin':'role-member'}">${k.role==='admin'?'👑 Admin':'👤 Member'}</span></td>
       <td><span class="badge-status ${stClass}">${stLabel}</span></td>
+      <td>
+        <span class="dev-badge" onclick="openDevices('${keyEsc}')" title="Xem thiết bị">
+          📱 <span class="count" style="color:${devColor}">${devCount}</span>/${maxDev}
+        </span>
+      </td>
       <td style="color:${days>0&&effStatus==='valid'?'var(--green)':'var(--red)'};">${daysStr}</td>
       <td style="color:var(--text2);font-size:12px">${expStr}</td>
-      <td style="color:var(--text2);font-size:12px">${k.note||'—'}</td>
       <td>
         <div class="actions">
-          <button class="btn btn-warning btn-sm" onclick="openRenew('${k.key}')">🔄</button>
+          <button class="btn btn-warning btn-sm" onclick="openRenew('${keyEsc}')" title="Gia hạn">🔄</button>
           ${effStatus === 'banned'
-            ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${k.key}')">✅</button>`
-            : `<button class="btn btn-danger btn-sm" onclick="banKey('${k.key}')">🚫</button>`}
-          <button class="btn btn-danger btn-sm" onclick="deleteKey('${k.key}')">🗑</button>
+            ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${keyEsc}')">✅</button>`
+            : `<button class="btn btn-danger btn-sm" onclick="banKey('${keyEsc}')">🚫</button>`}
+          <button class="btn btn-danger btn-sm" onclick="deleteKey('${keyEsc}')">🗑</button>
         </div>
       </td>
     </tr>`;
@@ -577,12 +660,68 @@ function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('📋 Đã copy key!', 'ok'));
 }
 
-// ══════════════════════════════════════════════════════
-//  CREATE KEY — gọi thẳng Cloudflare Worker
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
+//  DEVICES MODAL
+// ════════════════════════════════════════════════════════
+function openDevices(key) {
+  const k = keys.find(k => k.key === key);
+  if (!k) return;
+  document.getElementById('devices-key-info').textContent = `Key: ${key}`;
+  const list = document.getElementById('devices-list');
+  const devices = k.devices || [];
+  if (!devices.length) {
+    list.innerHTML = `<div class="device-empty">📱 Chưa có thiết bị nào đăng nhập</div>`;
+  } else {
+    list.innerHTML = devices.map((d, i) => `
+      <div class="device-item">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Thiết bị #${i+1}</div>
+            <div class="did">ID: ${d.id}</div>
+          </div>
+          <span style="font-size:10px;color:var(--text2);background:var(--surface);padding:2px 6px;border-radius:4px;border:1px solid var(--border)">
+            ${i === 0 ? '🟢 Đầu tiên' : '📱'}
+          </span>
+        </div>
+        <div class="dfirst" style="margin-top:6px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
+        <div class="dlast">🕐 Lần cuối: ${new Date(d.lastSeen).toLocaleString('vi-VN')}</div>
+      </div>
+    `).join('');
+  }
+  document.getElementById('devices-modal').style.display = 'flex';
+}
 
+// ════════════════════════════════════════════════════════
+//  CREATE KEY
+// ════════════════════════════════════════════════════════
 function openCreateModal() {
+  refreshPreviewKey();
   document.getElementById('create-modal').style.display = 'flex';
+}
+
+function generateKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const seg = () => Array.from({length:5}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  return `LQ-${seg()}-${seg()}-${seg()}-${seg()}`;
+}
+
+function refreshPreviewKey() {
+  pendingAutoKey = generateKey();
+  document.getElementById('key-preview-display').textContent = pendingAutoKey;
+}
+
+function setKeyMode(mode) {
+  keyMode = mode;
+  document.getElementById('tab-auto').classList.toggle('active', mode === 'auto');
+  document.getElementById('tab-custom').classList.toggle('active', mode === 'custom');
+  document.getElementById('auto-key-section').style.display   = mode === 'auto'   ? '' : 'none';
+  document.getElementById('custom-key-section').style.display = mode === 'custom' ? '' : 'none';
+}
+
+function updateCustomKeyPreview() {
+  const raw = document.getElementById('c-custom-key').value.toUpperCase().replace(/[^A-Z0-9\-]/g, '');
+  document.getElementById('c-custom-key').value = raw;
+  document.getElementById('custom-key-preview').textContent = raw || '—';
 }
 
 function updateDeviceLimit() {
@@ -595,13 +734,16 @@ function updateCustomDays() {
     document.getElementById('c-duration').value === 'custom' ? 'block' : 'none';
 }
 
-function generateKey() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const seg = () => Array.from({length:5}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
-  return `LQ-${seg()}-${seg()}-${seg()}-${seg()}`;
-}
-
 async function createKey() {
+  // Xác định key name
+  let newKey;
+  if (keyMode === 'custom') {
+    newKey = document.getElementById('c-custom-key').value.trim().toUpperCase();
+    if (!newKey) { showToast('❌ Vui lòng nhập tên key!', 'err'); return; }
+  } else {
+    newKey = pendingAutoKey || generateKey();
+  }
+
   const type   = document.getElementById('c-type').value;
   const maxDev = type === 'single' ? 1 : parseInt(document.getElementById('c-limit').value) || 3;
   const durSel = document.getElementById('c-duration').value;
@@ -611,9 +753,8 @@ async function createKey() {
   const role   = document.getElementById('c-role').value;
   const note   = document.getElementById('c-note').value.trim();
 
-  const now      = new Date();
-  const expires  = new Date(now.getTime() + days * 86400000);
-  const newKey   = generateKey();
+  const now     = new Date();
+  const expires = new Date(now.getTime() + days * 86400000);
 
   const btn = document.getElementById('create-btn');
   btn.disabled = true;
@@ -621,51 +762,49 @@ async function createKey() {
 
   try {
     await apiPost('/api/admin/create', {
-      key:        newKey,
-      role,
-      maxDevices: maxDev,
-      expiresAt:  expires.toISOString(),
-      note
+      key: newKey, role, maxDevices: maxDev,
+      expiresAt: expires.toISOString(), note
     });
 
-    // Thêm vào cache local
     keys.unshift({
       key: newKey, role, status: 'valid',
       maxDevices: maxDev, devices: [],
       createdAt: now.toISOString(),
       expiresAt: expires.toISOString(), note
     });
-    renderTable();
-    renderStats();
+    filteredKeys = [...keys];
+    renderTable(); renderStats();
     closeModal('create-modal');
     showToast(`✅ Đã tạo key: ${newKey}`, 'ok');
 
-    // Reset form
+    // Reset
     document.getElementById('c-note').value = '';
+    document.getElementById('c-custom-key').value = '';
+    document.getElementById('custom-key-preview').textContent = '—';
+    setKeyMode('auto');
+    refreshPreviewKey();
 
   } catch(e) {
     showToast(`❌ Lỗi tạo key: ${e.message}`, 'err');
   }
 
   btn.disabled = false;
-  btn.textContent = 'Tạo key';
+  btn.textContent = '✅ Tạo key';
 }
 
-// ══════════════════════════════════════════════════════
-//  BAN / UNBAN / DELETE — gọi Cloudflare Worker
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
+//  BAN / UNBAN / DELETE
+// ════════════════════════════════════════════════════════
 async function banKey(key) {
   if (!confirm('Bạn chắc muốn ban key này?')) return;
   try {
     await apiPost('/api/admin/ban', { key });
     const k = keys.find(k => k.key === key);
     if (k) k.status = 'banned';
-    renderTable(); renderStats();
+    filteredKeys = [...keys];
+    filterTable(); renderStats();
     showToast('🚫 Đã ban key', 'err');
-  } catch(e) {
-    showToast(`❌ ${e.message}`, 'err');
-  }
+  } catch(e) { showToast(`❌ ${e.message}`, 'err'); }
 }
 
 async function unbanKey(key) {
@@ -673,11 +812,10 @@ async function unbanKey(key) {
     await apiPost('/api/admin/unban', { key });
     const k = keys.find(k => k.key === key);
     if (k) k.status = new Date(k.expiresAt) > new Date() ? 'valid' : 'expired';
-    renderTable(); renderStats();
+    filteredKeys = [...keys];
+    filterTable(); renderStats();
     showToast('✅ Đã gỡ ban key', 'ok');
-  } catch(e) {
-    showToast(`❌ ${e.message}`, 'err');
-  }
+  } catch(e) { showToast(`❌ ${e.message}`, 'err'); }
 }
 
 async function deleteKey(key) {
@@ -685,17 +823,15 @@ async function deleteKey(key) {
   try {
     await apiPost('/api/admin/delete', { key });
     keys = keys.filter(k => k.key !== key);
+    filteredKeys = [...keys];
     renderTable(); renderStats();
     showToast('🗑 Đã xóa key', 'err');
-  } catch(e) {
-    showToast(`❌ ${e.message}`, 'err');
-  }
+  } catch(e) { showToast(`❌ ${e.message}`, 'err'); }
 }
 
-// ══════════════════════════════════════════════════════
-//  RENEW — gọi Cloudflare Worker
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
+//  RENEW
+// ════════════════════════════════════════════════════════
 function openRenew(key) {
   renewingKey = key;
   const k = keys.find(k => k.key === key);
@@ -709,7 +845,7 @@ function openRenew(key) {
 }
 
 async function confirmRenew() {
-  const durSel = document.getElementById('renew-duration').value;
+  const durSel  = document.getElementById('renew-duration').value;
   const addDays = durSel === 'custom'
     ? parseInt(document.getElementById('renew-custom-days').value) || 7
     : parseInt(durSel);
@@ -725,21 +861,19 @@ async function confirmRenew() {
       k.expiresAt = res.expiresAt;
       if (k.status === 'expired') k.status = 'valid';
     }
-    renderTable(); renderStats();
+    filteredKeys = [...keys];
+    filterTable(); renderStats();
     closeModal('renew-modal');
     showToast(`🔄 Đã gia hạn thêm ${addDays} ngày`, 'ok');
-  } catch(e) {
-    showToast(`❌ ${e.message}`, 'err');
-  }
+  } catch(e) { showToast(`❌ ${e.message}`, 'err'); }
 
   btn.disabled = false;
   btn.textContent = 'Gia hạn';
 }
 
-// ══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════
 //  UTILITIES
-// ══════════════════════════════════════════════════════
-
+// ════════════════════════════════════════════════════════
 function closeModal(id) {
   document.getElementById(id).style.display = 'none';
 }
