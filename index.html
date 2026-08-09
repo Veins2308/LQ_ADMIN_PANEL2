@@ -465,15 +465,47 @@
   </div>
 </div>
 
-<!-- Perms Modal -->
+<!-- Edit Note Modal -->
+<div class="modal-overlay" id="editnote-modal" style="display:none">
+  <div class="modal" style="width:380px">
+    <button class="close" onclick="closeModal('editnote-modal')">✕</button>
+    <h2>📝 Sửa ghi chú</h2>
+    <div id="editnote-key-info" style="font-size:11px;color:var(--text2);font-family:monospace;word-break:break-all;margin-bottom:14px"></div>
+    <textarea id="editnote-input" rows="3" placeholder="Nhập ghi chú..."
+      style="width:100%;box-sizing:border-box;padding:10px;background:var(--surface);
+             color:var(--text);border:1px solid var(--border);border-radius:8px;
+             font-size:13px;resize:vertical;font-family:inherit"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-ghost" onclick="closeModal('editnote-modal')">Hủy</button>
+      <button class="btn btn-success" id="editnote-btn" onclick="confirmEditNote()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Perms Modal (per-device) -->
 <div class="modal-overlay" id="perms-modal" style="display:none">
   <div class="modal perms-modal">
     <button class="close" onclick="closeModal('perms-modal')">✕</button>
     <h2>🔒 Phân quyền chức năng</h2>
     <div id="perms-key-label" style="font-size:11px;color:var(--text2);font-family:monospace;
-         word-break:break-all;margin-bottom:12px;"></div>
+         word-break:break-all;margin-bottom:10px;"></div>
 
-    <!-- Tab selector -->
+    <!-- Device selector -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:var(--text2);font-weight:600;display:block;margin-bottom:6px">
+        📱 CHỌN THIẾT BỊ CẦN KHÓA
+      </label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="perms-device-select" onchange="permsDeviceChanged()"
+          style="flex:1;padding:8px 10px;background:var(--surface);color:var(--text);
+                 border:1px solid var(--border);border-radius:8px;font-size:13px">
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="openDeviceName()" title="Đặt tên thiết bị">✏️</button>
+      </div>
+      <div id="perms-device-info" style="font-size:11px;color:var(--text2);margin-top:6px;padding-left:2px"></div>
+    </div>
+
+    <!-- Feature tabs -->
     <div class="perms-tabs" id="perms-tabs"></div>
 
     <!-- Feature list -->
@@ -492,6 +524,23 @@
         <button class="btn btn-ghost" onclick="closeModal('perms-modal')">Hủy</button>
         <button class="btn btn-warning" id="perms-save-btn" onclick="confirmPerms()">💾 Lưu</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Device Name Modal -->
+<div class="modal-overlay" id="devicename-modal" style="display:none">
+  <div class="modal" style="width:360px">
+    <button class="close" onclick="closeModal('devicename-modal')">✕</button>
+    <h2>✏️ Đặt tên thiết bị</h2>
+    <div id="devicename-id-label" style="font-size:11px;color:var(--text2);font-family:monospace;
+         word-break:break-all;margin-bottom:14px"></div>
+    <input id="devicename-input" type="text" placeholder="Ví dụ: iPhone của Tuất, iPad Pro..."
+      style="width:100%;box-sizing:border-box;padding:10px;background:var(--surface);
+             color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px">
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-ghost" onclick="closeModal('devicename-modal')">Hủy</button>
+      <button class="btn btn-success" id="devicename-btn" onclick="confirmDeviceName()">💾 Lưu</button>
     </div>
   </div>
 </div>
@@ -734,6 +783,7 @@ function renderTable() {
         <div class="actions">
           <button class="btn btn-warning btn-sm" onclick="openRenew('${keyEsc}')" title="Gia hạn">🔄</button>
           <button class="btn btn-info btn-sm" onclick="openEditRole('${keyEsc}')" title="Sửa role">✏️</button>
+          <button class="btn btn-info btn-sm" onclick="openEditNote('${keyEsc}')" title="Sửa ghi chú">📝</button>
           <button class="btn btn-warning btn-sm" onclick="openPerms('${keyEsc}')" title="Phân quyền chức năng">🔒</button>
           ${effStatus === 'banned'
             ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${keyEsc}')">✅</button>`
@@ -962,77 +1012,170 @@ async function confirmRenew() {
 
 
 // ════════════════════════════════════════════════════════
-//  FEATURE PERMISSIONS — danh sách chức năng theo tab
+//  FEATURE PERMISSIONS — per-device, runtime apply
 // ════════════════════════════════════════════════════════
 const FEATURE_GROUPS = [
-  {
-    tab: 'MAIN',
-    sections: [
-      { title: 'MAIN', features: [
-        'Map sáng','Vẽ ESP','Vẽ line','Hiển thị tổng số địch','Vẽ box',
-        'Hiển thị khoảng cách tới địch','Hiển thị máu địch',
-        'Bỏ qua vẽ địch đã hiển thị','Hiển thị tên tướng địch'
-      ]},
-      { title: 'THÔNG TIN ĐỊCH', features: [
-        'Hiển thị thông tin team địch','Trạng thái chiêu cuối team địch',
-        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'
-      ]},
-    ]
-  },
-  {
-    tab: 'AIMBOT',
-    sections: [
-      { title: 'AIMBOT', features: ['Aimbot','Chiêu 1','Chiêu 2','Chiêu 3'] }
-    ]
-  },
-  {
-    tab: 'AUTO',
-    sections: [
-      { title: 'AUTO', features: [
-        'Auto mua đồ (Món đầu đề cử)','Auto bán mua đồ nhanh'
-      ]},
-      { title: 'TRỪNG TRỊ / BỘC PHÁ', features: [
-        'Auto trừng trị','Chỉ trừng trị Rồng và Tà Thần',
-        'Auto bộc phá','Auto băng sương','Auto hồi máu','Auto cấp cứu'
-      ]},
-    ]
-  },
-  {
-    tab: 'MOD SKIN',
-    sections: [
-      { title: 'MOD SKIN', features: [
-        'Mod rank','Mở khoá tất cả skin','Mod nút bấm','Mod thông báo diệt'
-      ]}
-    ]
-  },
-  {
-    tab: 'OTHER',
-    sections: [
-      { title: 'KHÁC', features: [
-        'Ẩn UID','Xem lịch sử đấu người khác (Đểu)'
-      ]}
-    ]
-  }
+  { tab:'MAIN', sections:[
+    { title:'MAIN', features:['Map sáng','Vẽ ESP','Vẽ line','Hiển thị tổng số địch','Vẽ box',
+        'Hiển thị khoảng cách tới địch','Hiển thị máu địch','Bỏ qua vẽ địch đã hiển thị','Hiển thị tên tướng địch'] },
+    { title:'THÔNG TIN ĐỊCH', features:['Hiển thị thông tin team địch','Trạng thái chiêu cuối team địch',
+        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'] }
+  ]},
+  { tab:'AIMBOT', sections:[
+    { title:'AIMBOT', features:['Aimbot','Chiêu 1','Chiêu 2','Chiêu 3'] }
+  ]},
+  { tab:'AUTO', sections:[
+    { title:'AUTO', features:['Auto mua đồ (Món đầu đề cử)','Auto bán mua đồ nhanh'] },
+    { title:'TRỪNG TRỊ / BỘC PHÁ', features:['Auto trừng trị','Chỉ trừng trị Rồng và Tà Thần',
+        'Auto bộc phá','Auto băng sương','Auto hồi máu','Auto cấp cứu'] }
+  ]},
+  { tab:'MOD SKIN', sections:[
+    { title:'MOD SKIN', features:['Mod rank','Mở khoá tất cả skin','Mod nút bấm','Mod thông báo diệt'] }
+  ]},
+  { tab:'OTHER', sections:[
+    { title:'KHÁC', features:['Ẩn UID','Xem lịch sử đấu người khác (Đểu)'] }
+  ]}
 ];
 
-let permsKey = null;        // key đang edit
-let permsBlocked = new Set(); // features đang bị block
+// ── State ────────────────────────────────────────────────
+let permsKey       = null;
+let permsDeviceId  = null;
+let permsBlocked   = new Set();
+let permsKeyObj    = null;
 
-function openPerms(key) {
-  permsKey = key;
+// ── Edit Note ────────────────────────────────────────────
+let editNoteKey = null;
+function openEditNote(key) {
+  editNoteKey = key;
   const k = keys.find(k => k.key === key);
-  permsBlocked = new Set(k ? (k.blocked_features || []) : []);
+  document.getElementById('editnote-key-info').textContent = 'Key: ' + key;
+  document.getElementById('editnote-input').value = k ? (k.note || '') : '';
+  document.getElementById('editnote-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('editnote-input').focus(), 100);
+}
+async function confirmEditNote() {
+  if (!editNoteKey) return;
+  const note = document.getElementById('editnote-input').value.trim();
+  const btn  = document.getElementById('editnote-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
+  try {
+    await apiPost('/api/admin/setnote', { key: editNoteKey, note });
+    const k = keys.find(k => k.key === editNoteKey);
+    if (k) k.note = note;
+    filteredKeys = [...keys]; filterTable();
+    closeModal('editnote-modal');
+    showToast('📝 Đã lưu ghi chú', 'ok');
+  } catch(e) { showToast('❌ ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '💾 Lưu';
+}
+
+// ── Device Name ──────────────────────────────────────────
+let deviceNameKey = null;
+let deviceNameId  = null;
+function openDeviceName() {
+  if (!permsDeviceId || !permsKey) return;
+  deviceNameKey = permsKey;
+  deviceNameId  = permsDeviceId;
+  const k = keys.find(k => k.key === permsKey);
+  const d = k ? (k.devices||[]).find(d => d.id === permsDeviceId) : null;
+  document.getElementById('devicename-id-label').textContent = 'Device ID: ' + permsDeviceId;
+  document.getElementById('devicename-input').value = d ? (d.name || '') : '';
+  document.getElementById('devicename-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('devicename-input').focus(), 100);
+}
+async function confirmDeviceName() {
+  if (!deviceNameKey || !deviceNameId) return;
+  const name = document.getElementById('devicename-input').value.trim();
+  const btn  = document.getElementById('devicename-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
+  try {
+    await apiPost('/api/admin/setdevicename', { key: deviceNameKey, deviceId: deviceNameId, name });
+    // Update local data
+    const k = keys.find(k => k.key === deviceNameKey);
+    if (k) { const d = (k.devices||[]).find(d => d.id === deviceNameId); if (d) d.name = name; }
+    filteredKeys = [...keys]; filterTable();
+    closeModal('devicename-modal');
+    // Refresh device dropdown in perms modal
+    renderDeviceSelector();
+    showToast('✅ Đã đặt tên thiết bị: ' + (name || '(xóa tên)'), 'ok');
+  } catch(e) { showToast('❌ ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = '💾 Lưu';
+}
+
+// ── Perms Modal ──────────────────────────────────────────
+function openPerms(key) {
+  permsKey    = key;
+  permsKeyObj = keys.find(k => k.key === key);
+  permsDeviceId = null;
+  permsBlocked  = new Set();
 
   document.getElementById('perms-key-label').textContent = 'Key: ' + key;
 
-  // Render tabs
-  const tabsEl  = document.getElementById('perms-tabs');
-  const bodyEl   = document.getElementById('perms-body');
+  // Populate device selector
+  renderDeviceSelector();
+
+  // Select first device by default
+  const sel = document.getElementById('perms-device-select');
+  if (sel.options.length > 0) {
+    sel.selectedIndex = 0;
+    permsDeviceChanged();
+  } else {
+    document.getElementById('perms-device-info').textContent = '⚠️ Key này chưa có thiết bị nào đăng nhập.';
+    renderFeaturePanels();
+  }
+
+  document.getElementById('perms-modal').style.display = 'flex';
+}
+
+function renderDeviceSelector() {
+  const sel = document.getElementById('perms-device-select');
+  const devices = permsKeyObj ? (permsKeyObj.devices || []) : [];
+  sel.innerHTML = '';
+  if (devices.length === 0) {
+    sel.innerHTML = '<option value="">-- Chưa có thiết bị --</option>';
+    return;
+  }
+  devices.forEach((d, i) => {
+    const label = d.name
+      ? `${d.name} (${d.id.slice(0,8)}...)`
+      : `Thiết bị ${i+1} — ${d.id.slice(0,12)}...`;
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = label;
+    if (d.id === permsDeviceId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function permsDeviceChanged() {
+  const sel = document.getElementById('perms-device-select');
+  permsDeviceId = sel.value || null;
+
+  const devices = permsKeyObj ? (permsKeyObj.devices || []) : [];
+  const d = devices.find(d => d.id === permsDeviceId);
+
+  if (d) {
+    const lastSeen = d.lastSeen ? new Date(d.lastSeen).toLocaleString('vi-VN') : '—';
+    const blockedCount = (d.blocked_features || []).length;
+    document.getElementById('perms-device-info').innerHTML =
+      `📅 Lần cuối: ${lastSeen} &nbsp;|&nbsp; 🔒 Đang khoá: <b style="color:var(--red)">${blockedCount}</b> chức năng`;
+    permsBlocked = new Set(d.blocked_features || []);
+  } else {
+    document.getElementById('perms-device-info').textContent = '';
+    permsBlocked = new Set();
+  }
+
+  renderFeaturePanels();
+  updatePermsBadge();
+}
+
+function renderFeaturePanels() {
+  const tabsEl = document.getElementById('perms-tabs');
+  const bodyEl = document.getElementById('perms-body');
   tabsEl.innerHTML = '';
   bodyEl.innerHTML = '';
 
   FEATURE_GROUPS.forEach((group, gi) => {
-    // Tab button
     const btn = document.createElement('div');
     btn.className = 'perms-tab' + (gi === 0 ? ' active' : '');
     btn.textContent = group.tab;
@@ -1044,7 +1187,6 @@ function openPerms(key) {
     };
     tabsEl.appendChild(btn);
 
-    // Panel
     const panel = document.createElement('div');
     panel.className = 'perms-panel' + (gi === 0 ? ' active' : '');
     panel.id = 'perms-panel-' + gi;
@@ -1072,19 +1214,10 @@ function openPerms(key) {
 
     bodyEl.appendChild(panel);
   });
-
-  // Stats badge
-  updatePermsBadge();
-  document.getElementById('perms-modal').style.display = 'flex';
 }
 
-function permsToggle(checkbox) {
-  const feat = checkbox.dataset.feat;
-  if (checkbox.checked) {
-    permsBlocked.add(feat);
-  } else {
-    permsBlocked.delete(feat);
-  }
+function permsToggle(cb) {
+  cb.checked ? permsBlocked.add(cb.dataset.feat) : permsBlocked.delete(cb.dataset.feat);
   updatePermsBadge();
 }
 
@@ -1097,42 +1230,42 @@ function updatePermsBadge() {
 
 function permsSelectNone() {
   document.querySelectorAll('#perms-body input[type=checkbox]').forEach(cb => {
-    cb.checked = false;
-    permsBlocked.delete(cb.dataset.feat);
+    cb.checked = false; permsBlocked.delete(cb.dataset.feat);
   });
   updatePermsBadge();
 }
 
 function permsSelectAll() {
   document.querySelectorAll('#perms-body input[type=checkbox]').forEach(cb => {
-    cb.checked = true;
-    permsBlocked.add(cb.dataset.feat);
+    cb.checked = true; permsBlocked.add(cb.dataset.feat);
   });
   updatePermsBadge();
 }
 
 async function confirmPerms() {
-  if (!permsKey) return;
+  if (!permsKey || !permsDeviceId) {
+    showToast('⚠️ Vui lòng chọn thiết bị', 'err'); return;
+  }
   const btn = document.getElementById('perms-save-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
-
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
   const blocked = [...permsBlocked];
   try {
-    await apiPost('/api/admin/setperms', { key: permsKey, blocked_features: blocked });
+    await apiPost('/api/admin/setdeviceperms', { key: permsKey, deviceId: permsDeviceId, blocked_features: blocked });
+    // Update local data
     const k = keys.find(k => k.key === permsKey);
-    if (k) k.blocked_features = blocked;
-    filteredKeys = [...keys];
-    filterTable();
+    if (k) {
+      const d = (k.devices||[]).find(d => d.id === permsDeviceId);
+      if (d) d.blocked_features = blocked;
+    }
+    filteredKeys = [...keys]; filterTable();
+    // Refresh device info line
+    permsDeviceChanged();
     closeModal('perms-modal');
-    const n = blocked.length;
-    showToast(n > 0
-      ? `🔒 Đã khoá ${n} chức năng cho key này`
-      : `✅ Đã mở khoá toàn bộ chức năng`, 'ok');
+    showToast(blocked.length > 0
+      ? `🔒 Đã khoá ${blocked.length} chức năng cho thiết bị này`
+      : '✅ Đã mở khoá toàn bộ chức năng cho thiết bị này', 'ok');
   } catch(e) { showToast('❌ ' + e.message, 'err'); }
-
-  btn.disabled = false;
-  btn.textContent = '💾 Lưu';
+  btn.disabled = false; btn.textContent = '💾 Lưu';
 }
 
 // ════════════════════════════════════════════════════════
