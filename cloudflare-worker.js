@@ -81,7 +81,8 @@ export default {
         role:             record.role,
         days_left:        daysLeft,
         expires:          record.expiresAt,
-        blocked_features: deviceBlocked,   // per-device blocked list
+        blocked_features: deviceBlocked,      // per-device blocked list
+        banner_config:    record.banner_config || null, // per-key banner text
         message:          'OK'
       }, corsHeaders);
     }
@@ -106,20 +107,21 @@ export default {
             await env.KEYS_KV.put(item.name, JSON.stringify(record));
           }
           allKeys.push({
-            key:        record.key,
-            role:       record.role,
-            status:     record.status,
-            maxDevices: record.maxDevices,
-            devices:    (record.devices || []).map(d => ({
+            key:           record.key,
+            role:          record.role,
+            status:        record.status,
+            maxDevices:    record.maxDevices,
+            devices:       (record.devices || []).map(d => ({
               id:               d.id,
               name:             d.name || '',
               firstSeen:        d.firstSeen,
               lastSeen:         d.lastSeen,
               blocked_features: d.blocked_features || []
             })),
-            createdAt:  record.createdAt,
-            expiresAt:  record.expiresAt,
-            note:       record.note || ''
+            createdAt:     record.createdAt,
+            expiresAt:     record.expiresAt,
+            note:          record.note || '',
+            banner_config: record.banner_config || null
           });
         } catch {}
       }
@@ -266,6 +268,33 @@ export default {
       return json({ success: true, deviceId, blocked_features }, corsHeaders);
     }
 
+
+    // ── POST /api/admin/setkeybanner ───────────────────────────────────────
+    // Lưu banner_config riêng theo từng key
+    if (url.pathname === '/api/admin/setkeybanner' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const { key, banner_config } = await request.json();
+      if (!key || typeof banner_config !== 'object')
+        return json({ error: 'Invalid params' }, corsHeaders, 400);
+      const raw = await env.KEYS_KV.get(`key:${key}`);
+      if (!raw) return json({ error: 'Not found' }, corsHeaders, 404);
+      const record = JSON.parse(raw);
+      record.banner_config = banner_config;
+      await env.KEYS_KV.put(`key:${key}`, JSON.stringify(record));
+      return json({ success: true, key, banner_config }, corsHeaders);
+    }
+
+    // ── GET /api/getkeybanner ──────────────────────────────────────────────
+    // Public endpoint: source LQ_OBJ gọi sau khi validate key để lấy banner riêng
+    if (url.pathname === '/api/getkeybanner') {
+      const key = request.headers.get('X-Auth-Key') || url.searchParams.get('key');
+      if (!key) return json({ error: 'Missing key' }, corsHeaders, 400);
+      const raw = await env.KEYS_KV.get(`key:${key}`);
+      if (!raw) return json({ error: 'Not found' }, corsHeaders, 404);
+      const record = JSON.parse(raw);
+      return json({ banner_config: record.banner_config || null }, corsHeaders);
+    }
 
     // ── GET /api/admin/getconfig ────────────────────────────────────────────
     if (url.pathname === '/api/admin/getconfig') {
