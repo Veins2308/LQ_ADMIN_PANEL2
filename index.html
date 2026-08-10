@@ -606,27 +606,32 @@
     <!-- Fields -->
     <div class="banner-field">
       <label>📌 Tiêu đề chính (bannerTitle)</label>
-      <input id="banner-f-title" type="text" placeholder="LQMB MENU VIP"
-             oninput="document.getElementById('bp-title-preview').textContent=this.value||'LQMB MENU VIP'">
+      <textarea id="banner-f-title" rows="2" placeholder="LQMB MENU VIP"
+             oninput="document.getElementById('bp-title-preview').textContent=this.value||'LQMB MENU VIP'"
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
     </div>
     <div class="banner-field">
       <label>✍️ Dòng credit</label>
-      <input id="banner-f-credit" type="text" placeholder="CREDIT: VEINS X LETIENDAT"
-             oninput="document.getElementById('bp-credit-preview').textContent=this.value||'CREDIT: VEINS X LETIENDAT'">
+      <textarea id="banner-f-credit" rows="2" placeholder="CREDIT: VEINS X LETIENDAT"
+             oninput="document.getElementById('bp-credit-preview').textContent=this.value||'CREDIT: VEINS X LETIENDAT'"
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
     </div>
     <div class="banner-field">
       <label>📝 Dòng phụ (dòng 1)</label>
-      <input id="banner-f-sub1" type="text" placeholder="MƯỜI GIỜ KÉM BẢY"
-             oninput="updateBannerSubPreview()">
+      <textarea id="banner-f-sub1" rows="2" placeholder="MƯỜI GIỜ KÉM BẢY"
+             oninput="updateBannerSubPreview()"
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
     </div>
     <div class="banner-field">
       <label>📝 Dòng phụ (dòng 2)</label>
-      <input id="banner-f-sub2" type="text" placeholder="ANTIBAN ĐẾN KHI BỊ BAN !"
-             oninput="updateBannerSubPreview()">
+      <textarea id="banner-f-sub2" rows="2" placeholder="ANTIBAN ĐẾN KHI BỊ BAN !"
+             oninput="updateBannerSubPreview()"
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
       <button class="btn btn-ghost" onclick="closeModal('banner-modal')">Hủy</button>
+      <button class="btn btn-ghost" onclick="resetBannerFields()" title="Reset về text mặc định">🔄 Reset</button>
       <button class="btn btn-warning" id="banner-save-btn" onclick="confirmBanner()" style="background:#7c3aed">🎨 Lưu banner</button>
     </div>
   </div>
@@ -1503,6 +1508,23 @@ function updateBannerSubPreview() {
   const s1 = document.getElementById('banner-f-sub1').value || 'MƯỜI GIỜ KÉM BẢY';
   const s2 = document.getElementById('banner-f-sub2').value || 'ANTIBAN ĐẾN KHI BỊ BAN !';
   document.getElementById('bp-sub-preview').textContent = s1 + '\n' + s2;
+}
+
+const BANNER_DEFAULTS = {
+  title:  'LQMB MENU VIP',
+  credit: 'CREDIT: VEINS X LETIENDAT',
+  sub1:   'MƯỜI GIỜ KÉM BẢY',
+  sub2:   'ANTIBAN ĐẾN KHI BỊ BAN !'
+};
+
+function resetBannerFields() {
+  document.getElementById('banner-f-title').value  = BANNER_DEFAULTS.title;
+  document.getElementById('banner-f-credit').value = BANNER_DEFAULTS.credit;
+  document.getElementById('banner-f-sub1').value   = BANNER_DEFAULTS.sub1;
+  document.getElementById('banner-f-sub2').value   = BANNER_DEFAULTS.sub2;
+  document.getElementById('bp-title-preview').textContent  = BANNER_DEFAULTS.title;
+  document.getElementById('bp-credit-preview').textContent = BANNER_DEFAULTS.credit;
+  document.getElementById('bp-sub-preview').textContent    = BANNER_DEFAULTS.sub1 + '\n' + BANNER_DEFAULTS.sub2;
 }
 
 async function confirmBanner() {
