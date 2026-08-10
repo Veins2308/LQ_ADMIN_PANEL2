@@ -254,10 +254,13 @@
     color:var(--text); padding:9px 13px; border-radius:8px; font-size:13px; outline:none; }
   .banner-field input:focus { border-color:var(--accent); }
   .banner-preview { background:linear-gradient(135deg,#1a0533,#3b0764,#6d28d9);
-    border-radius:12px; padding:16px 20px; margin-bottom:16px; }
-  .banner-preview .bp-title  { font-size:22px; font-weight:900; color:#fff; line-height:1.2; }
-  .banner-preview .bp-credit { font-size:11px; color:rgba(255,255,255,.85); margin-top:2px; font-weight:700; }
-  .banner-preview .bp-sub    { font-size:9px;  color:rgba(255,255,255,.65); margin-top:6px; font-weight:700; white-space:pre-line; }
+    border-radius:12px; padding:16px 20px; margin-bottom:16px; overflow:visible; }
+  .banner-preview .bp-title  { font-size:22px; font-weight:900; color:#fff; line-height:1.2;
+    word-break:break-all; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .banner-preview .bp-credit { font-size:11px; color:rgba(255,255,255,.85); margin-top:2px; font-weight:700;
+    word-break:break-all; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .banner-preview .bp-sub    { font-size:9px;  color:rgba(255,255,255,.65); margin-top:6px; font-weight:700;
+    white-space:pre-wrap; word-break:break-all; overflow-wrap:anywhere; }
 
 </style>
 </head>
@@ -606,27 +609,27 @@
     <!-- Fields -->
     <div class="banner-field">
       <label>📌 Tiêu đề chính (bannerTitle)</label>
-      <textarea id="banner-f-title" rows="2" placeholder="LQMB MENU VIP"
+      <input type="text" id="banner-f-title" placeholder="LQMB MENU VIP"
              oninput="document.getElementById('bp-title-preview').textContent=this.value||'LQMB MENU VIP'"
-             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
     </div>
     <div class="banner-field">
       <label>✍️ Dòng credit</label>
-      <textarea id="banner-f-credit" rows="2" placeholder="CREDIT: VEINS X LETIENDAT"
+      <input type="text" id="banner-f-credit" placeholder="CREDIT: VEINS X LETIENDAT"
              oninput="document.getElementById('bp-credit-preview').textContent=this.value||'CREDIT: VEINS X LETIENDAT'"
-             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
     </div>
     <div class="banner-field">
       <label>📝 Dòng phụ (dòng 1)</label>
-      <textarea id="banner-f-sub1" rows="2" placeholder="MƯỜI GIỜ KÉM BẢY"
+      <input type="text" id="banner-f-sub1" placeholder="MƯỜI GIỜ KÉM BẢY"
              oninput="updateBannerSubPreview()"
-             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
     </div>
     <div class="banner-field">
       <label>📝 Dòng phụ (dòng 2)</label>
-      <textarea id="banner-f-sub2" rows="2" placeholder="ANTIBAN ĐẾN KHI BỊ BAN !"
+      <input type="text" id="banner-f-sub2" placeholder="ANTIBAN ĐẾN KHI BỊ BAN !"
              oninput="updateBannerSubPreview()"
-             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
+             style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 13px;border-radius:8px;font-size:13px;outline:none;font-family:inherit">
     </div>
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
