@@ -235,6 +235,30 @@
   .perms-modal { width: min(640px, 94vw) !important; }
   .btn-blocked { background:#c0392b !important; }
 
+  /* ── Feature type badge ── */
+  .feat-type { font-size:10px; padding:1px 6px; border-radius:9px; margin-left:6px;
+               font-weight:700; opacity:0.85; flex-shrink:0; }
+  .feat-type-switch   { background:rgba(16,185,129,.2);  color:#10b981; }
+  .feat-type-slider   { background:rgba(59,130,246,.2);  color:#3b82f6; }
+  .feat-type-dropdown { background:rgba(99,102,241,.2);  color:#818cf8; }
+  .feat-type-segment  { background:rgba(245,158,11,.2);  color:#f59e0b; }
+  .feat-type-textfield{ background:rgba(236,72,153,.2);  color:#ec4899; }
+  .feat-type-switchtext{ background:rgba(239,68,68,.2);  color:#ef4444; }
+
+  /* ── Banner modal ── */
+  .banner-modal { width: min(480px, 94vw) !important; }
+  .banner-field { margin-bottom:14px; }
+  .banner-field label { font-size:11px; color:var(--text2); font-weight:600;
+    display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.05em; }
+  .banner-field input { width:100%; background:var(--surface2); border:1px solid var(--border);
+    color:var(--text); padding:9px 13px; border-radius:8px; font-size:13px; outline:none; }
+  .banner-field input:focus { border-color:var(--accent); }
+  .banner-preview { background:linear-gradient(135deg,#1a0533,#3b0764,#6d28d9);
+    border-radius:12px; padding:16px 20px; margin-bottom:16px; }
+  .banner-preview .bp-title  { font-size:22px; font-weight:900; color:#fff; line-height:1.2; }
+  .banner-preview .bp-credit { font-size:11px; color:rgba(255,255,255,.85); margin-top:2px; font-weight:700; }
+  .banner-preview .bp-sub    { font-size:9px;  color:rgba(255,255,255,.65); margin-top:6px; font-weight:700; white-space:pre-line; }
+
 </style>
 </head>
 <body>
@@ -565,6 +589,49 @@
   </div>
 </div>
 
+<!-- ── BANNER MODAL ──────────────────────────────────────── -->
+<div class="modal-overlay" id="banner-modal" style="display:none">
+  <div class="modal banner-modal">
+    <button class="close" onclick="closeModal('banner-modal')">✕</button>
+    <h2>🎨 Sửa banner menu</h2>
+    <div id="banner-key-info" style="font-size:11px;color:var(--text2);font-family:monospace;word-break:break-all;margin-bottom:14px;"></div>
+
+    <!-- Live preview -->
+    <div class="banner-preview">
+      <div class="bp-title"  id="bp-title-preview">LQMB MENU VIP</div>
+      <div class="bp-credit" id="bp-credit-preview">CREDIT: VEINS X LETIENDAT</div>
+      <div class="bp-sub"    id="bp-sub-preview">MƯỜI GIỜ KÉM BẢY&#10;ANTIBAN ĐẾN KHI BỊ BAN !</div>
+    </div>
+
+    <!-- Fields -->
+    <div class="banner-field">
+      <label>📌 Tiêu đề chính (bannerTitle)</label>
+      <input id="banner-f-title" type="text" placeholder="LQMB MENU VIP"
+             oninput="document.getElementById('bp-title-preview').textContent=this.value||'LQMB MENU VIP'">
+    </div>
+    <div class="banner-field">
+      <label>✍️ Dòng credit</label>
+      <input id="banner-f-credit" type="text" placeholder="CREDIT: VEINS X LETIENDAT"
+             oninput="document.getElementById('bp-credit-preview').textContent=this.value||'CREDIT: VEINS X LETIENDAT'">
+    </div>
+    <div class="banner-field">
+      <label>📝 Dòng phụ (dòng 1)</label>
+      <input id="banner-f-sub1" type="text" placeholder="MƯỜI GIỜ KÉM BẢY"
+             oninput="updateBannerSubPreview()">
+    </div>
+    <div class="banner-field">
+      <label>📝 Dòng phụ (dòng 2)</label>
+      <input id="banner-f-sub2" type="text" placeholder="ANTIBAN ĐẾN KHI BỊ BAN !"
+             oninput="updateBannerSubPreview()">
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px">
+      <button class="btn btn-ghost" onclick="closeModal('banner-modal')">Hủy</button>
+      <button class="btn btn-warning" id="banner-save-btn" onclick="confirmBanner()" style="background:#7c3aed">🎨 Lưu banner</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -785,6 +852,7 @@ function renderTable() {
           <button class="btn btn-info btn-sm" onclick="openEditRole('${keyEsc}')" title="Sửa role">✏️</button>
           <button class="btn btn-info btn-sm" onclick="openEditNote('${keyEsc}')" title="Sửa ghi chú">📝</button>
           <button class="btn btn-warning btn-sm" onclick="openPerms('${keyEsc}')" title="Phân quyền chức năng">🔒</button>
+          <button class="btn btn-info btn-sm" onclick="openBanner('${keyEsc}')" title="Sửa banner menu" style="background:#7c3aed">🎨</button>
           ${effStatus === 'banned'
             ? `<button class="btn btn-success btn-sm" onclick="unbanKey('${keyEsc}')">✅</button>`
             : `<button class="btn btn-danger btn-sm" onclick="banKey('${keyEsc}')">🚫</button>`}
@@ -1016,24 +1084,108 @@ async function confirmRenew() {
 // ════════════════════════════════════════════════════════
 const FEATURE_GROUPS = [
   { tab:'MAIN', sections:[
-    { title:'MAIN', features:['Map sáng','Vẽ ESP','Vẽ line','Hiển thị tổng số địch','Vẽ box',
-        'Hiển thị khoảng cách tới địch','Hiển thị máu địch','Bỏ qua vẽ địch đã hiển thị','Hiển thị tên tướng địch'] },
-    { title:'THÔNG TIN ĐỊCH', features:['Hiển thị thông tin team địch','Trạng thái chiêu cuối team địch',
-        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'] }
+    { title:'MAIN', features:[
+        'Map sáng','Vẽ ESP','Vẽ line','Hiển thị tổng số địch','Vẽ box',
+        'Hiển thị khoảng cách tới địch','Hiển thị máu địch',
+        'Bỏ qua vẽ địch đã hiển thị','Hiển thị tên tướng địch'
+      ], types:{
+        'Map sáng':'switch','Vẽ ESP':'switch','Vẽ line':'switch',
+        'Hiển thị tổng số địch':'switch','Vẽ box':'switch',
+        'Hiển thị khoảng cách tới địch':'switch','Hiển thị máu địch':'switch',
+        'Bỏ qua vẽ địch đã hiển thị':'switch','Hiển thị tên tướng địch':'switch'
+      }
+    },
+    { title:'THÔNG TIN ĐỊCH', features:[
+        'Hiển thị thông tin team địch','Trạng thái chiêu cuối team địch',
+        'Thông tin phép bổ trợ team địch','Hiển thị rank team địch'
+      ], types:{
+        'Hiển thị thông tin team địch':'switch','Trạng thái chiêu cuối team địch':'switch',
+        'Thông tin phép bổ trợ team địch':'switch','Hiển thị rank team địch':'switch'
+      }
+    },
+    { title:'ĐỔI TÊN PLAYER', features:[
+        'Đổi tên player','Tên tuỳ chỉnh','Cam xa'
+      ], types:{
+        'Đổi tên player':'dropdown','Tên tuỳ chỉnh':'textfield','Cam xa':'slider'
+      }
+    }
   ]},
   { tab:'AIMBOT', sections:[
-    { title:'AIMBOT', features:['Aimbot','Chiêu 1','Chiêu 2','Chiêu 3'] }
+    { title:'AIMBOT', features:[
+        'Aimbot','Chiêu 1','Chiêu 2','Chiêu 3',
+        'Khoảng cách Aimbot','Độ nhạy khoá mục tiêu','Kiểu Aimbot','Vẽ tia'
+      ], types:{
+        'Aimbot':'switch','Chiêu 1':'switch','Chiêu 2':'switch','Chiêu 3':'switch',
+        'Khoảng cách Aimbot':'slider','Độ nhạy khoá mục tiêu':'slider',
+        'Kiểu Aimbot':'dropdown','Vẽ tia':'dropdown'
+      }
+    }
   ]},
   { tab:'AUTO', sections:[
-    { title:'AUTO', features:['Auto mua đồ (Món đầu đề cử)','Auto bán mua đồ nhanh'] },
-    { title:'TRỪNG TRỊ / BỘC PHÁ', features:['Auto trừng trị','Chỉ trừng trị Rồng và Tà Thần',
-        'Auto bộc phá','Auto băng sương','Auto hồi máu','Auto cấp cứu'] }
+    { title:'AUTO', features:[
+        'Auto mua đồ (Món đầu đề cử)','Auto bán mua đồ nhanh'
+      ], types:{
+        'Auto mua đồ (Món đầu đề cử)':'switch','Auto bán mua đồ nhanh':'switch'
+      }
+    },
+    { title:'TRỪNG TRỊ / BỘC PHÁ', features:[
+        'Auto trừng trị','Chỉ trừng trị Rồng và Tà Thần',
+        'Auto bộc phá','%HP Bộc phá',
+        'Auto băng sương','%HP Băng sương',
+        'Auto hồi máu','%HP Hồi máu',
+        'Auto cấp cứu','%HP Cấp cứu'
+      ], types:{
+        'Auto trừng trị':'switch','Chỉ trừng trị Rồng và Tà Thần':'switch',
+        'Auto bộc phá':'switch','%HP Bộc phá':'slider',
+        'Auto băng sương':'switch','%HP Băng sương':'slider',
+        'Auto hồi máu':'switch','%HP Hồi máu':'slider',
+        'Auto cấp cứu':'switch','%HP Cấp cứu':'slider'
+      }
+    }
   ]},
   { tab:'MOD SKIN', sections:[
-    { title:'MOD SKIN', features:['Mod rank','Mở khoá tất cả skin','Mod nút bấm','Mod thông báo diệt'] }
+    { title:'MOD RANK', features:[
+        'Mod rank','Rank','Số sao','Số ấn','Top rank','Cục'
+      ], types:{
+        'Mod rank':'switch','Rank':'dropdown','Số sao':'slider',
+        'Số ấn':'slider','Top rank':'slider','Cục':'dropdown'
+      }
+    },
+    { title:'MOD SKIN', features:[
+        'Mở khoá tất cả skin',
+        'Mod nút bấm','Chế độ nút bấm','Chọn skin nút',
+        'Mod thông báo diệt','Chế độ thông báo diệt','Chọn thông báo diệt'
+      ], types:{
+        'Mở khoá tất cả skin':'switch',
+        'Mod nút bấm':'switch','Chế độ nút bấm':'segment','Chọn skin nút':'dropdown',
+        'Mod thông báo diệt':'switch','Chế độ thông báo diệt':'segment','Chọn thông báo diệt':'dropdown'
+      }
+    }
+  ]},
+  { tab:'KILL NOTIFY', sections:[
+    { title:'TEXT KILL NOTIFY', features:[
+        'Chiến công đầu','Hạ','Double Kill','Triple Kill','Quata Kill',
+        'Penta Kill','Gotcha','Truyền thuyết','Huyền thoại','Thần thánh',
+        'Phá trụ địch','Quét sạch','Chấm dứt','Lính siêu cấp',
+        'Ceasar','Ceasar hắc ám','Ceasar bạo chúa','Rồng','Rồng ánh sáng'
+      ], types:{
+        'Chiến công đầu':'switch+text','Hạ':'switch+text','Double Kill':'switch+text',
+        'Triple Kill':'switch+text','Quata Kill':'switch+text','Penta Kill':'switch+text',
+        'Gotcha':'switch+text','Truyền thuyết':'switch+text','Huyền thoại':'switch+text',
+        'Thần thánh':'switch+text','Phá trụ địch':'switch+text','Quét sạch':'switch+text',
+        'Chấm dứt':'switch+text','Lính siêu cấp':'switch+text',
+        'Ceasar':'switch+text','Ceasar hắc ám':'switch+text','Ceasar bạo chúa':'switch+text',
+        'Rồng':'switch+text','Rồng ánh sáng':'switch+text'
+      }
+    }
   ]},
   { tab:'OTHER', sections:[
-    { title:'KHÁC', features:['Ẩn UID','Xem lịch sử đấu người khác (Đểu)'] }
+    { title:'KHÁC', features:[
+        'Ẩn UID','Xem lịch sử đấu người khác (Đểu)'
+      ], types:{
+        'Ẩn UID':'switch','Xem lịch sử đấu người khác (Đểu)':'switch'
+      }
+    }
   ]}
 ];
 
@@ -1199,11 +1351,29 @@ function renderFeaturePanels() {
 
       sec.features.forEach(feat => {
         const isBlocked = permsBlocked.has(feat);
+        const ctrlType  = (sec.types && sec.types[feat]) || 'switch';
+        // Map type to label & css class
+        const typeInfo = {
+          'switch':     { label:'SW',       cls:'feat-type-switch'    },
+          'slider':     { label:'SLIDER',   cls:'feat-type-slider'    },
+          'dropdown':   { label:'DROP',     cls:'feat-type-dropdown'  },
+          'segment':    { label:'SEG',      cls:'feat-type-segment'   },
+          'textfield':  { label:'TEXT',     cls:'feat-type-textfield' },
+          'switch+text':{ label:'SW+TEXT',  cls:'feat-type-switchtext'}
+        }[ctrlType] || { label:'SW', cls:'feat-type-switch' };
+
         const row = document.createElement('div');
-        row.className = 'perms-feature';
+        row.className = 'perms-feature' + (isBlocked ? ' blocked' : '');
+        row.style.cssText = isBlocked
+          ? 'background:rgba(239,68,68,.07);border-radius:8px;padding:2px 6px;'
+          : '';
         row.innerHTML = `
-          <span class="perms-feature-name">${feat}</span>
-          <label class="perms-toggle" title="${isBlocked ? 'Đang bị khoá' : 'Đang hoạt động'}">
+          <span class="perms-feature-name" style="${isBlocked ? 'color:#ef4444;text-decoration:line-through;opacity:.7' : ''}">
+            ${feat}
+            <span class="feat-type ${typeInfo.cls}">${typeInfo.label}</span>
+            ${isBlocked ? '<span style="font-size:10px;color:#ef4444;margin-left:4px">🔒 Bị khóa</span>' : ''}
+          </span>
+          <label class="perms-toggle" title="${isBlocked ? 'Đang bị khoá — click để mở' : 'Đang hoạt động — click để khóa'}">
             <input type="checkbox" data-feat="${feat}" ${isBlocked ? 'checked' : ''}
                    onchange="permsToggle(this)">
             <span class="slider"></span>
@@ -1298,6 +1468,62 @@ async function confirmEditRole() {
   } catch(e) { showToast(`❌ ${e.message}`, 'err'); }
   btn.disabled = false;
   btn.textContent = '💾 Lưu';
+}
+
+// ════════════════════════════════════════════════════════
+//  BANNER MODAL
+// ════════════════════════════════════════════════════════
+let bannerKey = null;
+
+function openBanner(key) {
+  bannerKey = key;
+  const k = keys.find(k => k.key === key);
+  document.getElementById('banner-key-info').textContent = 'Key: ' + key;
+
+  // Load saved banner or defaults
+  const b = (k && k.banner_config) ? k.banner_config : {};
+  const title  = b.title  || 'LQMB MENU VIP';
+  const credit = b.credit || 'CREDIT: VEINS X LETIENDAT';
+  const sub1   = b.sub1   || 'MƯỜI GIỜ KÉM BẢY';
+  const sub2   = b.sub2   || 'ANTIBAN ĐẾN KHI BỊ BAN !';
+
+  document.getElementById('banner-f-title').value  = title;
+  document.getElementById('banner-f-credit').value = credit;
+  document.getElementById('banner-f-sub1').value   = sub1;
+  document.getElementById('banner-f-sub2').value   = sub2;
+
+  document.getElementById('bp-title-preview').textContent  = title;
+  document.getElementById('bp-credit-preview').textContent = credit;
+  document.getElementById('bp-sub-preview').textContent    = sub1 + '\n' + sub2;
+
+  document.getElementById('banner-modal').style.display = 'flex';
+}
+
+function updateBannerSubPreview() {
+  const s1 = document.getElementById('banner-f-sub1').value || 'MƯỜI GIỜ KÉM BẢY';
+  const s2 = document.getElementById('banner-f-sub2').value || 'ANTIBAN ĐẾN KHI BỊ BAN !';
+  document.getElementById('bp-sub-preview').textContent = s1 + '\n' + s2;
+}
+
+async function confirmBanner() {
+  if (!bannerKey) return;
+  const btn = document.getElementById('banner-save-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Đang lưu...';
+  const bannerData = {
+    title:  document.getElementById('banner-f-title').value.trim()  || 'LQMB MENU VIP',
+    credit: document.getElementById('banner-f-credit').value.trim() || 'CREDIT: VEINS X LETIENDAT',
+    sub1:   document.getElementById('banner-f-sub1').value.trim()   || 'MƯỜI GIỜ KÉM BẢY',
+    sub2:   document.getElementById('banner-f-sub2').value.trim()   || 'ANTIBAN ĐẾN KHI BỊ BAN !'
+  };
+  try {
+    await apiPost('/api/admin/setkeybanner', { key: bannerKey, banner_config: bannerData });
+    // Update local data
+    const k = keys.find(k => k.key === bannerKey);
+    if (k) k.banner_config = bannerData;
+    closeModal('banner-modal');
+    showToast('🎨 Đã lưu banner cho key này', 'ok');
+  } catch(e) { showToast('❌ ' + e.message, 'err'); }
+  btn.disabled = false; btn.innerHTML = '🎨 Lưu banner';
 }
 
 // ════════════════════════════════════════════════════════
