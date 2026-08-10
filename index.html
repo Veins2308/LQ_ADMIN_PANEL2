@@ -887,29 +887,59 @@ function openDevices(key) {
   if (!devices.length) {
     list.innerHTML = `<div class="device-empty">📱 Chưa có thiết bị nào đăng nhập</div>`;
   } else {
-    list.innerHTML = devices.map((d, i) => `
+    list.innerHTML = devices.map((d, i) => {
+      const nameEsc = (d.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const idEsc   = d.id.replace(/'/g, "\\'");
+      const keyEsc  = key.replace(/'/g, "\\'");
+      return `
       <div class="device-item">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div>
+          <div style="flex:1;min-width:0">
             <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Thiết bị #${i+1}</div>
-            <div class="did">ID: ${d.id}</div>
+            <div class="did" style="margin-bottom:6px">ID: ${d.id}</div>
+            <!-- Tên thiết bị + đổi tên inline -->
+            <div style="display:flex;gap:6px;align-items:center">
+              <input id="dname-${i}" type="text" value="${nameEsc}" placeholder="Chưa đặt tên..."
+                style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+                       padding:5px 9px;border-radius:6px;font-size:12px;outline:none;min-width:0">
+              <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap"
+                onclick="saveDeviceNameInline('${keyEsc}','${idEsc}',${i})">💾 Lưu tên</button>
+            </div>
           </div>
-          <span style="font-size:10px;color:var(--text2);background:var(--surface);padding:2px 6px;border-radius:4px;border:1px solid var(--border)">
+          <span style="font-size:10px;color:var(--text2);background:var(--surface);padding:2px 6px;border-radius:4px;border:1px solid var(--border);margin-left:8px;flex-shrink:0">
             ${i === 0 ? '🟢 Đầu tiên' : '📱'}
           </span>
         </div>
-        <div class="dfirst" style="margin-top:6px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
+        <div class="dfirst" style="margin-top:8px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
         <div class="dlast">🕐 Lần cuối: ${new Date(d.lastSeen).toLocaleString('vi-VN')}</div>
         <div style="margin-top:8px">
           <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px"
-            onclick="openKeylogModal('${d.id}','${(d.name||d.id).replace(/'/g,"\\'")}')">
+            onclick="openKeylogModal('${idEsc}','${nameEsc||idEsc}')">
             ⌨️ Xem log bàn phím
           </button>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   }
   document.getElementById('devices-modal').style.display = 'flex';
+}
+
+async function saveDeviceNameInline(key, deviceId, idx) {
+  const input = document.getElementById('dname-' + idx);
+  if (!input) return;
+  const name = input.value.trim();
+  try {
+    await apiPost('/api/admin/setdevicename', { key, deviceId, name });
+    // Cập nhật local state
+    const k = keys.find(k => k.key === key);
+    if (k) { const d = (k.devices||[]).find(d => d.id === deviceId); if (d) d.name = name; }
+    // Flash xanh
+    input.style.borderColor = 'var(--green)';
+    setTimeout(() => input.style.borderColor = '', 1500);
+    showToast('✅ Đã lưu tên thiết bị', 'ok');
+  } catch(e) {
+    showToast('❌ Lỗi lưu tên: ' + e.message, 'error');
+  }
 }
 
 // ════════════════════════════════════════════════════════
