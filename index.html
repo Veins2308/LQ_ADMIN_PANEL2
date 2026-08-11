@@ -1806,6 +1806,14 @@ async function openChatAdmin(deviceID, key) {
   document.getElementById('chat-hide-read').checked = false;
   document.getElementById('chat-admin-modal').style.display = 'flex';
 
+  // Load trạng thái hideReadStatus từ server cho device này
+  try {
+    const chatData = await apiGet(`/api/admin/chat?device=${encodeURIComponent(deviceID)}`);
+    if (chatData.hideReadStatus !== undefined) {
+      document.getElementById('chat-hide-read').checked = chatData.hideReadStatus === true;
+    }
+  } catch {}
+
   await _chatLoad();
   _chatStartPoll();
 }
@@ -1817,11 +1825,23 @@ function closeChatAdmin() {
   _chatAdminKey = null;
 }
 
+async function _chatHideReadChanged() {
+  const checked = document.getElementById('chat-hide-read').checked;
+  if (!_chatAdminDevice) return;
+  try {
+    await apiPost('/api/admin/chat/sethideread', { deviceID: _chatAdminDevice, hideReadStatus: checked });
+  } catch {}
+  _chatRender(_chatLastMessages || []);
+}
+
+let _chatLastMessages = [];
+
 async function _chatLoad() {
   if (!_chatAdminDevice) return;
   try {
     const data = await apiGet(`/api/admin/chat?device=${encodeURIComponent(_chatAdminDevice)}`);
-    _chatRender(data.messages || []);
+    _chatLastMessages = data.messages || [];
+    _chatRender(_chatLastMessages);
     // Cập nhật badge unread trên key list
     const k = keys.find(k => k.key === _chatAdminKey);
     if (k) {
@@ -1917,7 +1937,7 @@ document.addEventListener('keydown', function(e) {
     <h3 id="chat-admin-title" style="margin:0 0 10px;font-size:15px">💬 Chat</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
-        <input type="checkbox" id="chat-hide-read" onchange="_chatLoad()"> Ẩn tin đã xem
+        <input type="checkbox" id="chat-hide-read" onchange="_chatHideReadChanged()"> Ẩn tin đã xem
       </label>
       <button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="_chatLoad()">🔄 Refresh</button>
       <button class="btn" style="font-size:12px;background:var(--red);color:#fff" onclick="chatAdminClear()">🗑 Xoá chat</button>
