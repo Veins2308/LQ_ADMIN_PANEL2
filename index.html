@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod6</title>
+<title>🔐 Key Manager - LQ Mod10</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -21,6 +21,43 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* ── Chat ── */
+  .chat-panel { display:none; position:fixed; right:0; top:0; bottom:0; width:400px;
+    background:var(--surface); border-left:1px solid var(--border); z-index:200;
+    flex-direction:column; box-shadow:-4px 0 24px rgba(0,0,0,0.4); }
+  .chat-panel.open { display:flex; }
+  .chat-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .chat-header h3 { flex:1; font-size:15px; color:var(--text); }
+  .chat-device-id { font-size:11px; color:var(--text2); font-family:monospace; word-break:break-all; }
+  .chat-messages { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .chat-msg { display:flex; flex-direction:column; max-width:80%; }
+  .chat-msg.user { align-self:flex-end; align-items:flex-end; }
+  .chat-msg.admin { align-self:flex-start; align-items:flex-start; }
+  .chat-msg.system { align-self:center; align-items:center; max-width:90%; }
+  .chat-bubble { padding:9px 14px; border-radius:14px; font-size:13px; line-height:1.45; word-break:break-word; }
+  .chat-msg.user .chat-bubble { background:#3b82f6; color:#fff; border-bottom-right-radius:4px; }
+  .chat-msg.admin .chat-bubble { background:var(--surface2); color:var(--text); border-bottom-left-radius:4px; }
+  .chat-msg.system .chat-bubble { background:rgba(255,255,255,0.07); color:var(--text2); font-size:11px; border-radius:8px; text-align:center; }
+  .chat-meta { font-size:10px; color:var(--text2); margin-top:2px; display:flex; gap:6px; align-items:center; }
+  .chat-meta .seen { color:#10b981; }
+  .chat-meta .unseen { color:var(--text2); }
+  .chat-input-area { padding:12px 16px; border-top:1px solid var(--border); display:flex; gap:8px; flex-shrink:0; }
+  .chat-input-area input { flex:1; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:9px 14px; border-radius:8px; font-size:13px; outline:none; }
+  .chat-input-area input:focus { border-color:var(--accent); }
+  .chat-sidebar { width:260px; flex-shrink:0; border-right:1px solid var(--border); overflow-y:auto; }
+  .chat-layout { display:flex; flex:1; overflow:hidden; }
+  .conv-item { padding:12px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .15s; }
+  .conv-item:hover { background:rgba(59,130,246,.07); }
+  .conv-item.active { background:rgba(59,130,246,.12); border-left:3px solid var(--accent); }
+  .conv-device { font-size:12px; font-family:monospace; color:var(--accent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .conv-key { font-size:10px; color:var(--text2); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .conv-last { font-size:11px; color:var(--text2); margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .conv-unread { display:inline-block; background:var(--red); color:#fff; border-radius:99px; font-size:10px; font-weight:700; padding:1px 6px; margin-left:6px; }
+  .chat-toolbar { padding:10px 16px; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; flex-shrink:0; flex-wrap:wrap; }
+  .badge-unread-chat { display:inline-block; background:var(--red); color:#fff; border-radius:99px; font-size:10px; font-weight:700; padding:1px 7px; margin-left:4px; }
+  .hide-status-toggle { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); }
+  .hide-status-toggle input[type=checkbox] { width:14px; height:14px; cursor:pointer; accent-color:var(--accent); }
 
   /* ── Login ── */
   #login-screen {
@@ -310,6 +347,10 @@
     <span class="badge" id="admin-badge">ADMIN</span>
     <span class="worker-url-display" id="worker-url-badge"></span>
     <button class="btn btn-ghost btn-sm" onclick="doLogout()">Đăng xuất</button>
+    <button class="btn btn-info btn-sm" onclick="openChatPanel()" id="chat-nav-btn" style="position:relative">
+      💬 Chat
+      <span id="chat-nav-badge" class="badge-unread-chat" style="display:none">0</span>
+    </button>
   </div>
 
   <div class="container">
@@ -641,6 +682,77 @@
       <button class="btn btn-ghost" onclick="closeModal('banner-modal')">Hủy</button>
       <button class="btn btn-ghost" onclick="resetBannerFields()" title="Reset về text mặc định">🔄 Reset</button>
       <button class="btn btn-warning" id="banner-save-btn" onclick="confirmBanner()" style="background:#7c3aed">🎨 Lưu banner</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CHAT PANEL ══ -->
+<div id="chat-panel" class="chat-panel">
+  <!-- Header toolbar -->
+  <div class="chat-toolbar">
+    <b style="font-size:14px;color:var(--accent)">💬 Chat Admin</b>
+    <button class="btn btn-ghost btn-sm" onclick="closeChatPanel()">✕ Đóng</button>
+    <button class="btn btn-success btn-sm" onclick="openBroadcastModal()">📢 Gửi tất cả</button>
+    <label class="hide-status-toggle" title="Khi bật, user sẽ không thấy trạng thái đã xem của các tin nhắn tiếp theo">
+      <input type="checkbox" id="hide-status-chk" onchange="toggleHideStatus(this.checked)">
+      Ẩn trạng thái đã xem
+    </label>
+    <button class="btn btn-ghost btn-sm" onclick="refreshChatConversations()" title="Làm mới">🔄</button>
+  </div>
+  <!-- Layout: sidebar + message area -->
+  <div class="chat-layout">
+    <!-- Conversation list -->
+    <div class="chat-sidebar" id="chat-sidebar">
+      <div style="padding:10px 14px;font-size:11px;color:var(--text2);border-bottom:1px solid var(--border)">Danh sách hội thoại</div>
+      <div id="conv-list"></div>
+    </div>
+    <!-- Message area -->
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+      <div id="chat-device-header" style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);display:none">
+        <div id="chat-current-device" style="font-family:monospace;color:var(--accent)"></div>
+        <div id="chat-current-key" style="color:var(--text2)"></div>
+        <button class="btn btn-info btn-sm" style="margin-top:6px" onclick="openSendToKeyModal()">📤 Gửi cho key này</button>
+      </div>
+      <div class="chat-messages" id="chat-messages-area">
+        <div style="text-align:center;color:var(--text2);padding:40px 0">Chọn hội thoại để xem tin nhắn</div>
+      </div>
+      <div class="chat-input-area" id="chat-input-area" style="display:none">
+        <input type="text" id="chat-reply-input" placeholder="Nhập tin nhắn trả lời..." 
+               onkeydown="if(event.key==='Enter')sendAdminReply()">
+        <button class="btn btn-primary btn-sm" onclick="sendAdminReply()">Gửi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Broadcast ══ -->
+<div class="modal-overlay" id="broadcast-modal" style="display:none">
+  <div class="modal" style="width:420px">
+    <button class="close" onclick="closeModal('broadcast-modal')">✕</button>
+    <h2>📢 Gửi tin nhắn cho tất cả</h2>
+    <p style="color:var(--text2);font-size:12px;margin-bottom:14px">Tin nhắn sẽ được gửi đến TẤT CẢ thiết bị của tất cả key.</p>
+    <textarea id="broadcast-input" rows="4" placeholder="Nhập nội dung tin nhắn..."
+      style="width:100%;box-sizing:border-box;padding:10px;background:var(--surface);color:var(--text);
+             border:1px solid var(--border);border-radius:8px;font-size:13px;resize:vertical;font-family:inherit"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-ghost" onclick="closeModal('broadcast-modal')">Hủy</button>
+      <button class="btn btn-success" id="broadcast-btn" onclick="confirmBroadcast()">📢 Gửi tất cả</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Send to key ══ -->
+<div class="modal-overlay" id="sendtokey-modal" style="display:none">
+  <div class="modal" style="width:420px">
+    <button class="close" onclick="closeModal('sendtokey-modal')">✕</button>
+    <h2>📤 Gửi cho key</h2>
+    <div id="sendtokey-key-info" style="font-size:11px;color:var(--text2);font-family:monospace;word-break:break-all;margin-bottom:12px"></div>
+    <textarea id="sendtokey-input" rows="4" placeholder="Nhập nội dung tin nhắn..."
+      style="width:100%;box-sizing:border-box;padding:10px;background:var(--surface);color:var(--text);
+             border:1px solid var(--border);border-radius:8px;font-size:13px;resize:vertical;font-family:inherit"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-ghost" onclick="closeModal('sendtokey-modal')">Hủy</button>
+      <button class="btn btn-primary" id="sendtokey-btn" onclick="confirmSendToKey()">📤 Gửi</button>
     </div>
   </div>
 </div>
@@ -1772,6 +1884,269 @@ const _origLoadAllKeys = loadAllKeys;
 window.loadAllKeys = async function() {
   await _origLoadAllKeys();
   startAutoRefresh();
+  startChatUnreadPoll();
+};
+</script>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  CHAT SYSTEM — ADMIN WEB
+// ════════════════════════════════════════════════════════
+
+let chatCurrentDevice = null;
+let chatCurrentKey    = null;
+let chatConversations = [];
+let chatHideStatus    = false;
+let chatPollInterval  = null;
+
+// ── Open/close chat panel ─────────────────────────────────────────────────
+function openChatPanel() {
+  document.getElementById('chat-panel').classList.add('open');
+  refreshChatConversations();
+  fetchHideStatus();
+}
+
+function closeChatPanel() {
+  document.getElementById('chat-panel').classList.remove('open');
+}
+
+// ── Poll unread count for navbar badge ────────────────────────────────────
+function startChatUnreadPoll() {
+  if (chatPollInterval) clearInterval(chatPollInterval);
+  chatPollInterval = setInterval(async () => {
+    try {
+      const data = await apiGet('/api/admin/chat/unread');
+      const total = (data.conversations || []).reduce((s, c) => s + (c.unread || 0), 0);
+      const badge = document.getElementById('chat-nav-badge');
+      if (total > 0) {
+        badge.textContent = total > 99 ? '99+' : total;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+      // If panel open, refresh conversation list
+      if (document.getElementById('chat-panel').classList.contains('open')) {
+        await refreshChatConversations();
+      }
+    } catch {}
+  }, 8000);
+}
+
+// ── Fetch all conversations ────────────────────────────────────────────────
+async function refreshChatConversations() {
+  try {
+    const data = await apiGet('/api/admin/chat/allconversations');
+    chatConversations = data.conversations || [];
+    renderConversationList();
+    // Update navbar badge
+    const total = chatConversations.reduce((s, c) => s + (c.unread || 0), 0);
+    const badge = document.getElementById('chat-nav-badge');
+    if (total > 0) { badge.textContent = total > 99 ? '99+' : total; badge.style.display = 'inline-block'; }
+    else badge.style.display = 'none';
+  } catch(e) {
+    console.error('Chat refresh failed', e);
+  }
+}
+
+function renderConversationList() {
+  const el = document.getElementById('conv-list');
+  if (!chatConversations.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2);font-size:12px">Chưa có hội thoại nào</div>';
+    return;
+  }
+  el.innerHTML = chatConversations.map((c, idx) => {
+    const isActive = chatCurrentDevice === c.deviceID;
+    const lastText = c.lastMessage ? (c.lastMessage.text || '').slice(0, 40) : '—';
+    const lastFrom = c.lastMessage?.from === 'user' ? 'User: ' : (c.lastMessage?.from === 'admin' ? 'Admin: ' : '');
+    const unreadBadge = c.unread > 0 ? `<span class="conv-unread">${c.unread}</span>` : '';
+    return `<div class="conv-item${isActive ? ' active' : ''}" onclick="openConversation('${c.deviceID.replace(/'/g,"\\'")}','${(c.key||'').replace(/'/g,"\\'")}')">
+      <div class="conv-device">${c.deviceID.slice(0,18)}...${unreadBadge}</div>
+      <div class="conv-key">Key: ${(c.key||'—').slice(0,20)}</div>
+      <div class="conv-last">${lastFrom}${lastText}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Open a specific conversation ───────────────────────────────────────────
+async function openConversation(deviceID, key) {
+  chatCurrentDevice = deviceID;
+  chatCurrentKey    = key;
+
+  document.getElementById('chat-device-header').style.display = 'block';
+  document.getElementById('chat-current-device').textContent = 'Device: ' + deviceID;
+  document.getElementById('chat-current-key').textContent = 'Key: ' + (key || '—');
+  document.getElementById('chat-input-area').style.display = 'flex';
+
+  renderConversationList(); // refresh active state
+
+  await loadConversationMessages(deviceID);
+}
+
+async function loadConversationMessages(deviceID) {
+  try {
+    const data = await apiGet(`/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}`);
+    renderMessages(data.messages || []);
+    // Refresh unread counts
+    await refreshChatConversations();
+  } catch(e) {
+    document.getElementById('chat-messages-area').innerHTML = `<div style="color:var(--red);padding:20px">Lỗi: ${e.message}</div>`;
+  }
+}
+
+function renderMessages(msgs) {
+  const area = document.getElementById('chat-messages-area');
+  if (!msgs.length) {
+    area.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">Chưa có tin nhắn</div>';
+    return;
+  }
+
+  area.innerHTML = msgs.map(m => {
+    const from = m.from || 'user';
+    const text = escapeHtml(m.text || '');
+    const ts   = formatMsgTime(m.ts || '');
+
+    if (from === 'system') {
+      return `<div class="chat-msg system"><div class="chat-bubble">${text}</div><div class="chat-meta">${ts}</div></div>`;
+    }
+
+    let statusHtml = '';
+    if (from === 'user') {
+      const seen = m.readByAdmin && !m.hideAdminStatus;
+      statusHtml = seen
+        ? `<span class="seen">✓✓ Đã xem</span>`
+        : `<span class="unseen">✓ Chưa đọc</span>`;
+    }
+
+    return `<div class="chat-msg ${from}">
+      <div class="chat-bubble">${text}</div>
+      <div class="chat-meta">${ts} ${statusHtml}</div>
+    </div>`;
+  }).join('');
+
+  area.scrollTop = area.scrollHeight;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatMsgTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('vi-VN', { hour:'2-digit', minute:'2-digit' });
+  } catch { return ''; }
+}
+
+// ── Send admin reply ───────────────────────────────────────────────────────
+async function sendAdminReply() {
+  if (!chatCurrentDevice) return;
+  const input = document.getElementById('chat-reply-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  try {
+    await apiPost('/api/admin/chat/reply', { deviceID: chatCurrentDevice, message: msg });
+    await loadConversationMessages(chatCurrentDevice);
+    showToast('✅ Đã gửi tin nhắn', 'ok');
+  } catch(e) {
+    showToast('❌ Gửi thất bại: ' + e.message, 'err');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('chat-reply-input');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') sendAdminReply(); });
+});
+
+// ── Broadcast modal ────────────────────────────────────────────────────────
+function openBroadcastModal() {
+  document.getElementById('broadcast-modal').style.display = 'flex';
+  document.getElementById('broadcast-input').value = '';
+}
+
+async function confirmBroadcast() {
+  const msg = document.getElementById('broadcast-input').value.trim();
+  if (!msg) return;
+  const btn = document.getElementById('broadcast-btn');
+  btn.disabled = true;
+  try {
+    const data = await apiPost('/api/admin/chat/broadcast', { message: msg });
+    showToast(`✅ Đã gửi đến ${data.sent} thiết bị`, 'ok');
+    closeModal('broadcast-modal');
+  } catch(e) {
+    showToast('❌ ' + e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
+// ── Send to key modal ──────────────────────────────────────────────────────
+function openSendToKeyModal() {
+  if (!chatCurrentKey) return;
+  document.getElementById('sendtokey-key-info').textContent = 'Key: ' + chatCurrentKey;
+  document.getElementById('sendtokey-input').value = '';
+  document.getElementById('sendtokey-modal').style.display = 'flex';
+}
+
+async function confirmSendToKey() {
+  const msg = document.getElementById('sendtokey-input').value.trim();
+  if (!msg || !chatCurrentKey) return;
+  const btn = document.getElementById('sendtokey-btn');
+  btn.disabled = true;
+  try {
+    const data = await apiPost('/api/admin/chat/sendtokey', { key: chatCurrentKey, message: msg });
+    showToast(`✅ Đã gửi đến ${data.sent} thiết bị`, 'ok');
+    closeModal('sendtokey-modal');
+    if (chatCurrentDevice) await loadConversationMessages(chatCurrentDevice);
+  } catch(e) {
+    showToast('❌ ' + e.message, 'err');
+  } finally { btn.disabled = false; }
+}
+
+// ── Hide status toggle ─────────────────────────────────────────────────────
+async function fetchHideStatus() {
+  try {
+    const data = await apiGet('/api/admin/chat/hidestatus');
+    chatHideStatus = !!data.enabled;
+    document.getElementById('hide-status-chk').checked = chatHideStatus;
+  } catch {}
+}
+
+async function toggleHideStatus(enabled) {
+  try {
+    await apiPost('/api/admin/chat/hidestatus', { enabled });
+    chatHideStatus = enabled;
+    showToast(enabled ? '👁 Ẩn trạng thái đã bật' : '👁 Ẩn trạng thái đã tắt', 'ok');
+  } catch(e) {
+    showToast('❌ ' + e.message, 'err');
+  }
+}
+
+// Also add chat button per row — add to renderTable in the actions column via an override
+const _origRenderTable = renderTable;
+window.renderTable = function() {
+  _origRenderTable();
+  // Add chat button to each row via mutation
+  document.querySelectorAll('#keys-tbody tr').forEach((row, idx) => {
+    const k = filteredKeys[idx];
+    if (!k) return;
+    const actionsCell = row.querySelector('.actions');
+    if (!actionsCell) return;
+    const devCount = (k.devices || []).length;
+    if (devCount === 0) return;
+    const keyEsc = k.key.replace(/'/g, "\\'");
+    const chatBtn = document.createElement('button');
+    chatBtn.className = 'btn btn-info btn-sm';
+    chatBtn.title = 'Chat với thiết bị';
+    chatBtn.style.background = '#059669';
+    chatBtn.innerHTML = '💬';
+    chatBtn.onclick = () => {
+      const firstDevice = (k.devices||[])[0];
+      if (!firstDevice) return;
+      openChatPanel();
+      openConversation(firstDevice.id, k.key);
+    };
+    actionsCell.appendChild(chatBtn);
+  });
 };
 </script>
 
