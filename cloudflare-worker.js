@@ -416,7 +416,381 @@ export default {
       return json({ success: true }, corsHeaders);
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // CHAT SYSTEM
+    // ══════════════════════════════════════════════════════════════════════
 
+    // ── POST /api/chat/send — User gửi tin nhắn cho admin ─────────────────
+    if (url.pathname === '/api/chat/send' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { deviceID, key, message } = body;
+      if (!deviceID || !message) return json({ error: 'Missing deviceID or message' }, corsHeaders, 400);
+
+      const chatKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(chatKey);
+      let record = raw ? JSON.parse(raw) : { deviceID, key: key || '', messages: [] };
+
+      const now = new Date().toISOString();
+      const msgObj = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+        from: 'user',
+        text: message.trim().slice(0, 2000),
+        ts: now,
+        readByAdmin: false,
+        // seenByUser will be set when admin replies
+      };
+      record.messages.push(msgObj);
+      // Keep latest 500
+      if (record.messages.length > 500) record.messages = record.messages.slice(-500);
+      record.key = key || record.key;
+      record.lastUserMsg = now;
+
+      await env.KEYS_KV.put(chatKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+
+      // Check if auto-reply needed: no admin reply since last user message
+      // We send auto-reply if there's no admin message after the last user message
+      const msgs = record.messages;
+      const lastAdminMsgIdx = msgs.slice().reverse().findIndex(m => m.from === 'admin');
+      const needsAutoReply = lastAdminMsgIdx === -1 || 
+        msgs[msgs.length - 1 - lastAdminMsgIdx].ts < now;
+
+      if (needsAutoReply) {
+        // Send auto-reply only if no admin reply exists after last user msg
+        const lastAdminMsg = msgs.slice().reverse().find(m => m.from === 'admin');
+        const lastUserMsgsBefore = msgs.filter(m => m.from === 'user');
+        // Only auto-reply if admin hasn't replied to this batch
+        const adminRepliedAfterLastUser = lastAdminMsg && 
+          lastAdminMsg.ts > lastUserMsgsBefore[lastUserMsgsBefore.length - 2]?.ts;
+
+        if (!adminRepliedAfterLastUser) {
+          // Schedule auto-reply check — we'll add auto-reply as a system message only if
+          // there's no admin message after the PREVIOUS user message
+          // Simpler: always add auto-reply when user sends if there's no admin msg after
+          //          the second-to-last user message.
+          // But for simplicity: add auto-reply inline unless admin has replied at all since previous user msg
+          const prevUserMsgs = msgs.filter(m => m.from === 'user');
+          const adminMsgsAfterPrevUser = prevUserMsgs.length >= 2
+            ? msgs.filter(m => m.from === 'admin' && m.ts >= prevUserMsgs[prevUserMsgs.length - 2].ts)
+            : msgs.filter(m => m.from === 'admin');
+
+          if (adminMsgsAfterPrevUser.length === 0) {
+            const autoMsg = {
+              id: `auto_${Date.now()}`,
+              from: 'system',
+              text: 'Vui lòng chờ admin trả lời.',
+              ts: new Date(Date.now() + 1000).toISOString(),
+              readByAdmin: true,
+              seenByUser: false,
+            };
+            record.messages.push(autoMsg);
+            await env.KEYS_KV.put(chatKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+          }
+        }
+      }
+
+      return json({ success: true, msgId: msgObj.id }, corsHeaders);
+    }
+
+    // ── GET /api/chat/messages — User poll tin nhắn ────────────────────────
+    if (url.pathname === '/api/chat/messages' && request.method === 'GET') {
+      const deviceID = url.searchParams.get('device');
+      const after = url.searchParams.get('after') || '';
+      if (!deviceID) return json({ error: 'Missing device' }, corsHeaders, 400);
+
+      const chatKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(chatKey);
+      if (!raw) return json({ messages: [], unread: 0 }, corsHeaders);
+      const record = JSON.parse(raw);
+
+      // Get hide-status setting
+      const hideStatusRaw = await env.KEYS_KV.get('chat:admin:hidestatus');
+      const hideStatus = hideStatusRaw ? JSON.parse(hideStatusRaw).enabled : false;
+
+      // Filter messages after timestamp
+      let msgs = record.messages || [];
+      if (after) msgs = msgs.filter(m => m.ts > after);
+
+      // Count unread admin/system messages
+      const allMsgs = record.messages || [];
+      const unread = allMsgs.filter(m => 
+        (m.from === 'admin' || m.from === 'system') && !m.seenByUser
+      ).length;
+
+      // Mark admin messages as seen by user (update in KV)
+      let updated = false;
+      (record.messages || []).forEach(m => {
+        if ((m.from === 'admin' || m.from === 'system') && !m.seenByUser) {
+          m.seenByUser = true;
+          updated = true;
+        }
+      });
+      if (updated) {
+        await env.KEYS_KV.put(chatKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+      }
+
+      // Apply hide status: for admin messages sent while hide is on, show as unread to user
+      // (handled in the message object itself — hideStatus flag stored per message)
+      const processedMsgs = msgs.map(m => ({
+        ...m,
+        // If admin hid status when this msg was sent, don't show 'seen' to user for user messages
+        adminSeen: m.from === 'user' ? (m.readByAdmin && !m.hideAdminStatus) : undefined,
+      }));
+
+      return json({ messages: processedMsgs, unread }, corsHeaders);
+    }
+
+    // ── GET /api/admin/chat/messages — Admin xem tin nhắn của device ───────
+    if (url.pathname === '/api/admin/chat/messages' && request.method === 'GET') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const deviceID = url.searchParams.get('device');
+      if (!deviceID) return json({ error: 'Missing device' }, corsHeaders, 400);
+
+      const chatKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(chatKey);
+      if (!raw) return json({ messages: [], deviceID }, corsHeaders);
+      const record = JSON.parse(raw);
+
+      // Get hide-status setting
+      const hideStatusRaw = await env.KEYS_KV.get('chat:admin:hidestatus');
+      const hideStatus = hideStatusRaw ? JSON.parse(hideStatusRaw).enabled : false;
+
+      // Mark user messages as read by admin
+      let updated = false;
+      (record.messages || []).forEach(m => {
+        if (m.from === 'user' && !m.readByAdmin) {
+          m.readByAdmin = true;
+          m.hideAdminStatus = hideStatus; // Snapshot hide status at read time
+          updated = true;
+        }
+      });
+      if (updated) {
+        await env.KEYS_KV.put(chatKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+      }
+
+      return json({ messages: record.messages || [], deviceID }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/reply — Admin trả lời ─────────────────────────
+    if (url.pathname === '/api/admin/chat/reply' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { deviceID, message } = body;
+      if (!deviceID || !message) return json({ error: 'Missing deviceID or message' }, corsHeaders, 400);
+
+      const chatKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(chatKey);
+      let record = raw ? JSON.parse(raw) : { deviceID, key: '', messages: [] };
+
+      const now = new Date().toISOString();
+      const msgObj = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+        from: 'admin',
+        text: message.trim().slice(0, 2000),
+        ts: now,
+        seenByUser: false,
+        readByAdmin: true,
+      };
+      record.messages.push(msgObj);
+      if (record.messages.length > 500) record.messages = record.messages.slice(-500);
+      record.lastAdminReply = now;
+
+      // Remove any pending auto-reply system messages (admin has now replied)
+      // Keep only system messages that were already seen by user
+      record.messages = record.messages.filter(m => 
+        m.from !== 'system' || m.seenByUser
+      );
+      // Add the admin message back (it might have been filtered if from === 'admin')
+      // Actually we need to ensure msgObj is there
+      if (!record.messages.find(m => m.id === msgObj.id)) {
+        record.messages.push(msgObj);
+      }
+
+      await env.KEYS_KV.put(chatKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
+      return json({ success: true }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/sendtokey — Admin gửi cho tất cả device của 1 key ──
+    if (url.pathname === '/api/admin/chat/sendtokey' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { key, message } = body;
+      if (!key || !message) return json({ error: 'Missing key or message' }, corsHeaders, 400);
+
+      const raw = await env.KEYS_KV.get(`key:${key}`);
+      if (!raw) return json({ error: 'Key not found' }, corsHeaders, 404);
+      const record = JSON.parse(raw);
+      const devices = record.devices || [];
+      let sent = 0;
+      const now = new Date();
+
+      for (const device of devices) {
+        const chatKey = `chat:${device.id}`;
+        const chatRaw = await env.KEYS_KV.get(chatKey);
+        let chatRecord = chatRaw ? JSON.parse(chatRaw) : { deviceID: device.id, key, messages: [] };
+        const msgObj = {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2,8)}_${sent}`,
+          from: 'admin',
+          text: message.trim().slice(0, 2000),
+          ts: new Date(now.getTime() + sent).toISOString(),
+          seenByUser: false,
+          readByAdmin: true,
+        };
+        chatRecord.messages.push(msgObj);
+        if (chatRecord.messages.length > 500) chatRecord.messages = chatRecord.messages.slice(-500);
+        // Remove unseen auto-replies
+        chatRecord.messages = chatRecord.messages.filter(m => m.from !== 'system' || m.seenByUser);
+        if (!chatRecord.messages.find(m => m.id === msgObj.id)) chatRecord.messages.push(msgObj);
+        await env.KEYS_KV.put(chatKey, JSON.stringify(chatRecord), { expirationTtl: 60 * 60 * 24 * 90 });
+        sent++;
+      }
+      return json({ success: true, sent }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/broadcast — Admin gửi cho TẤT CẢ key ─────────
+    if (url.pathname === '/api/admin/chat/broadcast' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { message } = body;
+      if (!message) return json({ error: 'Missing message' }, corsHeaders, 400);
+
+      const listed = await env.KEYS_KV.list({ prefix: 'key:' });
+      let sent = 0;
+      const now = new Date();
+
+      for (const item of listed.keys) {
+        const raw = await env.KEYS_KV.get(item.name);
+        if (!raw) continue;
+        try {
+          const record = JSON.parse(raw);
+          const devices = record.devices || [];
+          for (const device of devices) {
+            const chatKey = `chat:${device.id}`;
+            const chatRaw = await env.KEYS_KV.get(chatKey);
+            let chatRecord = chatRaw ? JSON.parse(chatRaw) : { deviceID: device.id, key: record.key, messages: [] };
+            const msgObj = {
+              id: `bcast_${Date.now()}_${Math.random().toString(36).slice(2,8)}_${sent}`,
+              from: 'admin',
+              text: message.trim().slice(0, 2000),
+              ts: new Date(now.getTime() + sent).toISOString(),
+              seenByUser: false,
+              readByAdmin: true,
+            };
+            chatRecord.messages.push(msgObj);
+            if (chatRecord.messages.length > 500) chatRecord.messages = chatRecord.messages.slice(-500);
+            chatRecord.messages = chatRecord.messages.filter(m => m.from !== 'system' || m.seenByUser);
+            if (!chatRecord.messages.find(m => m.id === msgObj.id)) chatRecord.messages.push(msgObj);
+            await env.KEYS_KV.put(chatKey, JSON.stringify(chatRecord), { expirationTtl: 60 * 60 * 24 * 90 });
+            sent++;
+          }
+        } catch {}
+      }
+      return json({ success: true, sent }, corsHeaders);
+    }
+
+    // ── GET /api/admin/chat/unread — Lấy danh sách device có tin chưa đọc ──
+    if (url.pathname === '/api/admin/chat/unread' && request.method === 'GET') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const listed = await env.KEYS_KV.list({ prefix: 'chat:' });
+      const result = [];
+
+      for (const item of listed.keys) {
+        if (item.name === 'chat:admin:hidestatus') continue;
+        const raw = await env.KEYS_KV.get(item.name);
+        if (!raw) continue;
+        try {
+          const record = JSON.parse(raw);
+          const msgs = record.messages || [];
+          const unreadFromUser = msgs.filter(m => m.from === 'user' && !m.readByAdmin).length;
+          const lastMsg = msgs[msgs.length - 1];
+          if (lastMsg || unreadFromUser > 0) {
+            result.push({
+              deviceID: record.deviceID,
+              key: record.key || '',
+              unread: unreadFromUser,
+              lastMessage: lastMsg || null,
+            });
+          }
+        } catch {}
+      }
+
+      // Sort by unread desc, then by last message ts desc
+      result.sort((a, b) => {
+        if (b.unread !== a.unread) return b.unread - a.unread;
+        const ta = a.lastMessage?.ts || '';
+        const tb = b.lastMessage?.ts || '';
+        return tb.localeCompare(ta);
+      });
+
+      return json({ conversations: result }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/hidestatus — Bật/tắt ẩn trạng thái đã xem ────
+    if (url.pathname === '/api/admin/chat/hidestatus' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { enabled } = body;
+      await env.KEYS_KV.put('chat:admin:hidestatus', JSON.stringify({ enabled: !!enabled }));
+      return json({ success: true, enabled: !!enabled }, corsHeaders);
+    }
+
+    // ── GET /api/admin/chat/hidestatus — Lấy trạng thái ẩn ─────────────────
+    if (url.pathname === '/api/admin/chat/hidestatus' && request.method === 'GET') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const raw = await env.KEYS_KV.get('chat:admin:hidestatus');
+      const enabled = raw ? JSON.parse(raw).enabled : false;
+      return json({ enabled }, corsHeaders);
+    }
+
+    // ── GET /api/admin/chat/allconversations — Tất cả conversation ──────────
+    if (url.pathname === '/api/admin/chat/allconversations' && request.method === 'GET') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const listed = await env.KEYS_KV.list({ prefix: 'chat:' });
+      const result = [];
+
+      for (const item of listed.keys) {
+        if (item.name === 'chat:admin:hidestatus') continue;
+        const raw = await env.KEYS_KV.get(item.name);
+        if (!raw) continue;
+        try {
+          const record = JSON.parse(raw);
+          const msgs = record.messages || [];
+          const unreadFromUser = msgs.filter(m => m.from === 'user' && !m.readByAdmin).length;
+          result.push({
+            deviceID: record.deviceID,
+            key: record.key || '',
+            unread: unreadFromUser,
+            messages: msgs,
+            lastMessage: msgs[msgs.length - 1] || null,
+          });
+        } catch {}
+      }
+
+      result.sort((a, b) => {
+        if (b.unread !== a.unread) return b.unread - a.unread;
+        const ta = a.lastMessage?.ts || '';
+        const tb = b.lastMessage?.ts || '';
+        return tb.localeCompare(ta);
+      });
+
+      return json({ conversations: result }, corsHeaders);
+    }
+
+    return json({ error: 'Not found' }, corsHeaders, 404);
   }
 };
 
