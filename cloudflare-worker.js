@@ -493,7 +493,7 @@ export default {
 
       const storageKey = `chat:${deviceID}`;
       const raw = await env.KEYS_KV.get(storageKey);
-      if (!raw) return json({ messages: [] }, corsHeaders);
+      if (!raw) return json({ messages: [], hideReadStatus: false }, corsHeaders);
 
       const record = JSON.parse(raw);
       let changed = false;
@@ -502,7 +502,8 @@ export default {
       });
       if (changed) await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
 
-      return json({ messages: record.messages || [] }, corsHeaders);
+      // Trả thêm hideReadStatus để game menu biết có cần ẩn trạng thái "Đã xem" không
+      return json({ messages: record.messages || [], hideReadStatus: record.hideReadStatus === true }, corsHeaders);
     }
 
     // ── GET /api/admin/chat ────────────────────────────────────────────────
@@ -525,7 +526,7 @@ export default {
       });
       if (changed) await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
 
-      return json({ messages: record.messages || [] }, corsHeaders);
+      return json({ messages: record.messages || [], hideReadStatus: record.hideReadStatus === true }, corsHeaders);
     }
 
     // ── POST /api/admin/chat/reply ─────────────────────────────────────────
@@ -553,6 +554,21 @@ export default {
 
       await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
       return json({ success: true }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/sethideread ──────────────────────────────────
+    // Admin bật/tắt ẩn trạng thái "Đã xem" cho user (lưu vào chat record)
+    if (url.pathname === '/api/admin/chat/sethideread' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const { deviceID, hideReadStatus } = await request.json();
+      if (!deviceID) return json({ error: 'Missing deviceID' }, corsHeaders, 400);
+      const storageKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(storageKey);
+      let record = raw ? JSON.parse(raw) : { deviceID, key: '', messages: [] };
+      record.hideReadStatus = hideReadStatus === true;
+      await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
+      return json({ success: true, hideReadStatus: record.hideReadStatus }, corsHeaders);
     }
 
     // ── POST /api/admin/chat/clear ─────────────────────────────────────────
