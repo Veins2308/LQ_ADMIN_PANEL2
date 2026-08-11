@@ -93,6 +93,30 @@ export default {
       if (adminToken !== env.ADMIN_TOKEN)
         return json({ error: 'Unauthorized' }, corsHeaders, 401);
 
+      // Lấy danh sách online devices
+      const onlineListed = await env.KEYS_KV.list({ prefix: 'online:' });
+      const onlineSet = new Set();
+      for (const item of onlineListed.keys) {
+        const raw = await env.KEYS_KV.get(item.name);
+        if (raw) {
+          try { const o = JSON.parse(raw); if (o.deviceID) onlineSet.add(o.deviceID); } catch {}
+        }
+      }
+
+      // Lấy unread chat counts
+      const chatListed = await env.KEYS_KV.list({ prefix: 'chat:' });
+      const unreadMap = {}; // deviceID -> unreadCount (tin nhắn user chưa được admin đọc)
+      for (const item of chatListed.keys) {
+        const raw = await env.KEYS_KV.get(item.name);
+        if (raw) {
+          try {
+            const c = JSON.parse(raw);
+            const unread = (c.messages || []).filter(m => m.from === 'user' && !m.readByAdmin).length;
+            if (unread > 0) unreadMap[c.deviceID] = unread;
+          } catch {}
+        }
+      }
+
       const listed = await env.KEYS_KV.list({ prefix: 'key:' });
       const allKeys = [];
 
@@ -106,18 +130,24 @@ export default {
             record.status = 'expired';
             await env.KEYS_KV.put(item.name, JSON.stringify(record));
           }
+          const devices = (record.devices || []).map(d => ({
+            id:               d.id,
+            name:             d.name || '',
+            firstSeen:        d.firstSeen,
+            lastSeen:         d.lastSeen,
+            blocked_features: d.blocked_features || [],
+            online:           onlineSet.has(d.id),
+            unreadCount:      unreadMap[d.id] || 0
+          }));
+          const onlineDevices = devices.filter(d => d.online).length;
           allKeys.push({
             key:           record.key,
             role:          record.role,
             status:        record.status,
             maxDevices:    record.maxDevices,
-            devices:       (record.devices || []).map(d => ({
-              id:               d.id,
-              name:             d.name || '',
-              firstSeen:        d.firstSeen,
-              lastSeen:         d.lastSeen,
-              blocked_features: d.blocked_features || []
-            })),
+            usedDevices:   devices.length,
+            onlineDevices,
+            devices,
             createdAt:     record.createdAt,
             expiresAt:     record.expiresAt,
             note:          record.note || '',
@@ -375,6 +405,185 @@ export default {
       return json({ success: true }, corsHeaders);
     }
 
+    // ── POST /api/heartbeat ────────────────────────────────────────────────
+    // Game gọi mỗi 30s để báo đang online, TTL 90s
+    if (url.pathname === '/api/heartbeat' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { deviceID, key } = body;
+      if (!deviceID) return json({ error: 'Missing deviceID' }, corsHeaders, 400);
+
+      // Cập nhật lastSeen trên record key
+      if (key) {
+        const raw = await env.KEYS_KV.get(`key:${key}`);
+        if (raw) {
+          try {
+            const record = JSON.parse(raw);
+            const device = (record.devices || []).find(d => d.id === deviceID);
+            if (device) {
+              device.lastSeen = new Date().toISOString();
+              await env.KEYS_KV.put(`key:${key}`, JSON.stringify(record));
+            }
+          } catch {}
+        }
+      }
+
+      // Lưu trạng thái online với TTL 90s
+      await env.KEYS_KV.put(`online:${deviceID}`, JSON.stringify({
+        deviceID, key: key || '', ts: new Date().toISOString()
+      }), { expirationTtl: 90 });
+
+      // Trả về tin nhắn chờ từ admin (nếu có)
+      const chatRaw = await env.KEYS_KV.get(`chat:${deviceID}`);
+      let pendingMessages = [];
+      if (chatRaw) {
+        try {
+          const chatRecord = JSON.parse(chatRaw);
+          pendingMessages = (chatRecord.messages || []).filter(m => m.from === 'admin' && !m.readByUser);
+        } catch {}
+      }
+
+      return json({ success: true, pendingMessages }, corsHeaders);
+    }
+
+    // ── POST /api/offline ──────────────────────────────────────────────────
+    // Game gọi khi thoát, xóa online ngay lập tức
+    if (url.pathname === '/api/offline' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { deviceID } = body;
+      if (!deviceID) return json({ error: 'Missing deviceID' }, corsHeaders, 400);
+      await env.KEYS_KV.delete(`online:${deviceID}`);
+      return json({ success: true }, corsHeaders);
+    }
+
+    // ── POST /api/chat/send ────────────────────────────────────────────────
+    // User (game) gửi tin nhắn cho admin
+    if (url.pathname === '/api/chat/send' && request.method === 'POST') {
+      let body;
+      try { body = await request.json(); } catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+      const { deviceID, key, message } = body;
+      if (!deviceID || !message) return json({ error: 'Missing deviceID or message' }, corsHeaders, 400);
+
+      const storageKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(storageKey);
+      let record = raw ? JSON.parse(raw) : { deviceID, key: key || '', messages: [] };
+
+      record.messages.push({
+        id: Date.now(),
+        from: 'user',
+        text: message,
+        ts: new Date().toISOString(),
+        readByAdmin: false,
+        readByUser: true
+      });
+      // Giữ tối đa 200 tin
+      if (record.messages.length > 200) record.messages = record.messages.slice(-200);
+      record.key = key || record.key;
+
+      await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
+      return json({ success: true }, corsHeaders);
+    }
+
+    // ── GET /api/chat/messages ─────────────────────────────────────────────
+    // User (game) poll tin nhắn từ admin, auto mark readByUser
+    if (url.pathname === '/api/chat/messages') {
+      const deviceID = request.headers.get('X-Device-ID') || url.searchParams.get('device');
+      if (!deviceID) return json({ error: 'Missing deviceID' }, corsHeaders, 400);
+
+      const storageKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(storageKey);
+      if (!raw) return json({ messages: [] }, corsHeaders);
+
+      const record = JSON.parse(raw);
+      let changed = false;
+      (record.messages || []).forEach(m => {
+        if (m.from === 'admin' && !m.readByUser) { m.readByUser = true; changed = true; }
+      });
+      if (changed) await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
+
+      return json({ messages: record.messages || [] }, corsHeaders);
+    }
+
+    // ── GET /api/admin/chat ────────────────────────────────────────────────
+    // Admin xem chat của 1 device, auto mark readByAdmin
+    if (url.pathname === '/api/admin/chat') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const deviceID = url.searchParams.get('device');
+      if (!deviceID) return json({ error: 'Missing device' }, corsHeaders, 400);
+
+      const storageKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(storageKey);
+      if (!raw) return json({ messages: [] }, corsHeaders);
+
+      const record = JSON.parse(raw);
+      let changed = false;
+      (record.messages || []).forEach(m => {
+        if (m.from === 'user' && !m.readByAdmin) { m.readByAdmin = true; changed = true; }
+      });
+      if (changed) await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
+
+      return json({ messages: record.messages || [] }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/reply ─────────────────────────────────────────
+    // Admin gửi tin nhắn trả lời cho user
+    if (url.pathname === '/api/admin/chat/reply' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const { deviceID, message } = await request.json();
+      if (!deviceID || !message) return json({ error: 'Missing deviceID or message' }, corsHeaders, 400);
+
+      const storageKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(storageKey);
+      let record = raw ? JSON.parse(raw) : { deviceID, key: '', messages: [] };
+
+      record.messages.push({
+        id: Date.now(),
+        from: 'admin',
+        text: message,
+        ts: new Date().toISOString(),
+        readByAdmin: true,
+        readByUser: false
+      });
+      if (record.messages.length > 200) record.messages = record.messages.slice(-200);
+
+      await env.KEYS_KV.put(storageKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 30 });
+      return json({ success: true }, corsHeaders);
+    }
+
+    // ── POST /api/admin/chat/clear ─────────────────────────────────────────
+    // Admin xóa toàn bộ chat của 1 device
+    if (url.pathname === '/api/admin/chat/clear' && request.method === 'POST') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      const { deviceID } = await request.json();
+      if (!deviceID) return json({ error: 'Missing deviceID' }, corsHeaders, 400);
+      await env.KEYS_KV.delete(`chat:${deviceID}`);
+      return json({ success: true }, corsHeaders);
+    }
+
+    // ── GET /api/admin/list (updated) ─────────────────────────────────────
+    // Note: already handled above, but we inject online status here via /api/admin/online
+    // ── GET /api/admin/online ──────────────────────────────────────────────
+    // Trả về danh sách device đang online
+    if (url.pathname === '/api/admin/online') {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) return json({ error: 'Unauthorized' }, corsHeaders, 401);
+
+      const listed = await env.KEYS_KV.list({ prefix: 'online:' });
+      const onlineDevices = [];
+      for (const item of listed.keys) {
+        const raw = await env.KEYS_KV.get(item.name);
+        if (raw) {
+          try { onlineDevices.push(JSON.parse(raw)); } catch {}
+        }
+      }
+      return json({ onlineDevices, total: onlineDevices.length }, corsHeaders);
+    }
 
   }
 };
