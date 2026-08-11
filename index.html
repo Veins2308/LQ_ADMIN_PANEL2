@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod6</title>
+<title>🔐 Key Manager - LQ Mod7</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1858,14 +1858,12 @@ function _chatRender(messages) {
     box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px;font-size:13px">Chưa có tin nhắn nào.</div>';
     return;
   }
-  const hide = document.getElementById('chat-hide-read').checked;
   box.innerHTML = messages.map(m => {
     const isAdmin = m.from === 'admin';
     const ts = m.ts ? new Date(m.ts).toLocaleString('vi-VN') : '';
     const readTick = isAdmin
-      ? (m.readByUser ? '<span style="color:#22c55e;font-size:11px"> ✓✓ Đã xem</span>' : '<span style="color:var(--text2);font-size:11px"> ✓ Đã gửi</span>')
-      : '';
-    if (hide && isAdmin && m.readByUser) return '';
+      ? (m.auto ? '<span style="color:#f59e0b;font-size:11px"> ⏳ Tự động</span>' : (m.readByUser ? '<span style="color:#22c55e;font-size:11px"> ✓✓ Đã xem</span>' : '<span style="color:var(--text2);font-size:11px"> ✓ Đã gửi</span>'))
+      : (m.readByAdmin ? '<span style="color:#22c55e;font-size:11px"> ✓✓ Admin đã xem</span>' : '<span style="color:var(--text2);font-size:11px"> ✓ Chưa đọc</span>');
     return `
       <div style="display:flex;flex-direction:column;align-items:${isAdmin?'flex-end':'flex-start'};margin-bottom:8px">
         <div style="max-width:78%;background:${isAdmin?'#7c3aed':'var(--surface2)'};color:${isAdmin?'#fff':'var(--text)'};
@@ -1937,7 +1935,7 @@ document.addEventListener('keydown', function(e) {
     <h3 id="chat-admin-title" style="margin:0 0 10px;font-size:15px">💬 Chat</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
-        <input type="checkbox" id="chat-hide-read" onchange="_chatHideReadChanged()"> Ẩn tin đã xem
+        <input type="checkbox" id="chat-hide-read" onchange="_chatHideReadChanged()"> Ẩn trạng thái đã xem trên menu người dùng
       </label>
       <button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="_chatLoad()">🔄 Refresh</button>
       <button class="btn" style="font-size:12px;background:var(--red);color:#fff" onclick="chatAdminClear()">🗑 Xoá chat</button>
