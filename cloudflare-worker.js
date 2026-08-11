@@ -1,6 +1,6 @@
 /**
  * Cloudflare Worker — Key Validate API v3
- * Per-device feature permissions, device naming, note editing
+ * Chat / Online / Auto Reply / Hide Read Status
  */
 
 export default {
@@ -10,30 +10,49 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Key, X-Device-ID, X-Admin-Token',
+      'Access-Control-Allow-Headers':
+        'Content-Type, X-Auth-Key, X-Device-ID, X-Admin-Token',
     };
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders });
+      return new Response(null, {
+        headers: corsHeaders,
+      });
     }
 
-    // ── GET /api/validate ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // VALIDATE KEY
+    // ─────────────────────────────────────────────────────────────────────
+
     if (url.pathname === '/api/validate') {
-      const key      = request.headers.get('X-Auth-Key') || url.searchParams.get('key');
-      const deviceID = request.headers.get('X-Device-ID') || url.searchParams.get('device');
+      const key =
+        request.headers.get('X-Auth-Key') ||
+        url.searchParams.get('key');
+
+      const deviceID =
+        request.headers.get('X-Device-ID') ||
+        url.searchParams.get('device');
 
       if (!key) {
         return json(
-          { status: 'invalid', message: 'Missing key' },
-          corsHeaders
+          {
+            status: 'invalid',
+            message: 'Missing key',
+          },
+          corsHeaders,
+          400
         );
       }
 
-      const raw = await env.KEYS_KV.get(`key:${key}`);
+      const raw =
+        await env.KEYS_KV.get(`key:${key}`);
 
       if (!raw) {
         return json(
-          { status: 'deleted', message: 'Key not found' },
+          {
+            status: 'deleted',
+            message: 'Key not found',
+          },
           corsHeaders
         );
       }
@@ -44,7 +63,10 @@ export default {
         record = JSON.parse(raw);
       } catch {
         return json(
-          { status: 'invalid', message: 'Corrupt record' },
+          {
+            status: 'invalid',
+            message: 'Corrupt record',
+          },
           corsHeaders
         );
       }
@@ -54,7 +76,7 @@ export default {
           {
             status: 'banned',
             message: 'Key is banned',
-            role: record.role
+            role: record.role,
           },
           corsHeaders
         );
@@ -62,7 +84,10 @@ export default {
 
       const now = new Date();
 
-      if (new Date(record.expiresAt) < now) {
+      if (
+        !record.expiresAt ||
+        new Date(record.expiresAt) < now
+      ) {
         record.status = 'expired';
 
         await env.KEYS_KV.put(
@@ -75,26 +100,36 @@ export default {
             status: 'expired',
             message: 'Key expired',
             role: record.role,
-            days_left: 0
+            days_left: 0,
           },
           corsHeaders
         );
       }
 
-      // Device management
-      const devices = record.devices || [];
+      const devices =
+        Array.isArray(record.devices)
+          ? record.devices
+          : [];
+
       let currentDevice = null;
 
       if (deviceID) {
-        currentDevice = devices.find(d => d.id === deviceID);
+        currentDevice =
+          devices.find(
+            d => d.id === deviceID
+          );
 
         if (!currentDevice) {
-          if (devices.length >= record.maxDevices) {
+          if (
+            devices.length >=
+            Number(record.maxDevices || 1)
+          ) {
             return json(
               {
                 status: 'device_limit',
-                message: `Key đã đạt giới hạn ${record.maxDevices} thiết bị`,
-                role: record.role
+                message:
+                  `Key đã đạt giới hạn ${record.maxDevices} thiết bị`,
+                role: record.role,
               },
               corsHeaders
             );
@@ -105,14 +140,19 @@ export default {
             name: '',
             firstSeen: now.toISOString(),
             lastSeen: now.toISOString(),
-            blocked_features: []
+            blocked_features: [],
           };
 
           devices.push(currentDevice);
         } else {
-          currentDevice.lastSeen = now.toISOString();
+          currentDevice.lastSeen =
+            now.toISOString();
 
-          if (!currentDevice.blocked_features) {
+          if (
+            !Array.isArray(
+              currentDevice.blocked_features
+            )
+          ) {
             currentDevice.blocked_features = [];
           }
         }
@@ -123,110 +163,180 @@ export default {
           `key:${key}`,
           JSON.stringify(record)
         );
+
+        // Validate key cũng tính là online.
+        await env.KEYS_KV.put(
+          `online:${deviceID}`,
+          JSON.stringify({
+            deviceID,
+            key,
+            ts: now.toISOString(),
+            source: 'validate',
+          }),
+          {
+            expirationTtl: 90,
+          }
+        );
       }
 
       const daysLeft = Math.ceil(
-        (new Date(record.expiresAt) - now) / 86400000
+        (
+          new Date(record.expiresAt) -
+          now
+        ) / 86400000
       );
-
-      const deviceBlocked = currentDevice
-        ? (currentDevice.blocked_features || [])
-        : [];
 
       return json(
         {
           status: 'valid',
           role: record.role,
-          days_left: daysLeft,
+          days_left: Math.max(
+            0,
+            daysLeft
+          ),
           expires: record.expiresAt,
-          blocked_features: deviceBlocked,
-          banner_config: record.banner_config || null,
-          message: 'OK'
+          blocked_features:
+            currentDevice
+              ? (
+                  currentDevice.blocked_features ||
+                  []
+                )
+              : [],
+          banner_config:
+            record.banner_config || null,
+          message: 'OK',
         },
         corsHeaders
       );
     }
 
-    // ── GET /api/admin/list ────────────────────────────────────────────────
-    if (url.pathname === '/api/admin/list') {
-      const adminToken = request.headers.get('X-Admin-Token');
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN LIST
+    // ─────────────────────────────────────────────────────────────────────
 
-      if (adminToken !== env.ADMIN_TOKEN) {
+    if (
+      url.pathname === '/api/admin/list'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error: 'Unauthorized',
+          },
           corsHeaders,
           401
         );
       }
 
-      // Lấy danh sách online devices
-      const onlineListed = await env.KEYS_KV.list({
-        prefix: 'online:'
-      });
+      const onlineListed =
+        await env.KEYS_KV.list({
+          prefix: 'online:',
+        });
 
-      const onlineSet = new Set();
+      const onlineMap = new Map();
 
-      for (const item of onlineListed.keys) {
-        const raw = await env.KEYS_KV.get(item.name);
-
-        if (raw) {
-          try {
-            const o = JSON.parse(raw);
-
-            if (o.deviceID) {
-              onlineSet.add(o.deviceID);
-            }
-          } catch {}
-        }
-      }
-
-      // Lấy unread chat counts
-      const chatListed = await env.KEYS_KV.list({
-        prefix: 'chat:'
-      });
-
-      const unreadMap = {};
-
-      for (const item of chatListed.keys) {
-        const raw = await env.KEYS_KV.get(item.name);
+      for (
+        const item of onlineListed.keys
+      ) {
+        const raw =
+          await env.KEYS_KV.get(
+            item.name
+          );
 
         if (!raw) continue;
 
         try {
-          const c = JSON.parse(raw);
+          const online =
+            JSON.parse(raw);
 
-          const unread = (c.messages || []).filter(
-            m =>
-              m.from === 'user' &&
-              !m.readByAdmin
-          ).length;
-
-          if (unread > 0) {
-            unreadMap[c.deviceID] = unread;
+          if (online.deviceID) {
+            onlineMap.set(
+              online.deviceID,
+              online
+            );
           }
         } catch {}
       }
 
-      const listed = await env.KEYS_KV.list({
-        prefix: 'key:'
-      });
+      const chatListed =
+        await env.KEYS_KV.list({
+          prefix: 'chat:',
+        });
 
-      const allKeys = [];
+      const unreadMap = {};
 
-      for (const item of listed.keys) {
-        const raw = await env.KEYS_KV.get(item.name);
+      for (
+        const item of chatListed.keys
+      ) {
+        const raw =
+          await env.KEYS_KV.get(
+            item.name
+          );
 
         if (!raw) continue;
 
         try {
-          const record = JSON.parse(raw);
+          const chat =
+            JSON.parse(raw);
+
+          const unread =
+            (
+              chat.messages || []
+            ).filter(
+              m =>
+                m.from === 'user' &&
+                m.readByAdmin !== true
+            ).length;
+
+          if (
+            unread > 0 &&
+            chat.deviceID
+          ) {
+            unreadMap[
+              chat.deviceID
+            ] = unread;
+          }
+        } catch {}
+      }
+
+      const listed =
+        await env.KEYS_KV.list({
+          prefix: 'key:',
+        });
+
+      const allKeys = [];
+
+      for (
+        const item of listed.keys
+      ) {
+        const raw =
+          await env.KEYS_KV.get(
+            item.name
+          );
+
+        if (!raw) continue;
+
+        try {
+          const record =
+            JSON.parse(raw);
+
           const now = new Date();
 
           if (
-            record.status === 'valid' &&
-            new Date(record.expiresAt) < now
+            record.expiresAt &&
+            new Date(
+              record.expiresAt
+            ) < now &&
+            record.status === 'valid'
           ) {
-            record.status = 'expired';
+            record.status =
+              'expired';
 
             await env.KEYS_KV.put(
               item.name,
@@ -234,61 +344,92 @@ export default {
             );
           }
 
-          const devices = (record.devices || []).map(d => ({
-            id: d.id,
-            name: d.name || '',
-            firstSeen: d.firstSeen,
-            lastSeen: d.lastSeen,
-            blocked_features: d.blocked_features || [],
-            online: onlineSet.has(d.id),
-            unreadCount: unreadMap[d.id] || 0
-          }));
+          const devices =
+            (
+              record.devices || []
+            ).map(d => {
+              const online =
+                onlineMap.has(d.id);
 
-          const onlineDevices = devices.filter(
-            d => d.online
-          ).length;
+              return {
+                id: d.id,
+                name: d.name || '',
+                firstSeen:
+                  d.firstSeen || null,
+                lastSeen:
+                  d.lastSeen || null,
+                blocked_features:
+                  d.blocked_features ||
+                  [],
+                online,
+                unreadCount:
+                  unreadMap[d.id] ||
+                  0,
+              };
+            });
 
           allKeys.push({
             key: record.key,
             role: record.role,
             status: record.status,
-            maxDevices: record.maxDevices,
-            usedDevices: devices.length,
-            onlineDevices,
+            maxDevices:
+              record.maxDevices,
+            usedDevices:
+              devices.length,
+            onlineDevices:
+              devices.filter(
+                d => d.online
+              ).length,
             devices,
-            createdAt: record.createdAt,
-            expiresAt: record.expiresAt,
-            note: record.note || '',
-            banner_config: record.banner_config || null
+            createdAt:
+              record.createdAt,
+            expiresAt:
+              record.expiresAt,
+            note:
+              record.note || '',
+            banner_config:
+              record.banner_config ||
+              null,
           });
         } catch {}
       }
 
       allKeys.sort(
         (a, b) =>
-          new Date(b.createdAt) -
-          new Date(a.createdAt)
+          new Date(b.createdAt || 0) -
+          new Date(a.createdAt || 0)
       );
 
       return json(
         {
           keys: allKeys,
-          total: allKeys.length
+          total: allKeys.length,
         },
         corsHeaders
       );
     }
 
-    // ── POST /api/admin/create ─────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN CREATE
+    // ─────────────────────────────────────────────────────────────────────
+
     if (
-      url.pathname === '/api/admin/create' &&
+      url.pathname ===
+        '/api/admin/create' &&
       request.method === 'POST'
     ) {
-      const adminToken = request.headers.get('X-Admin-Token');
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
 
-      if (adminToken !== env.ADMIN_TOKEN) {
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error: 'Unauthorized',
+          },
           corsHeaders,
           401
         );
@@ -300,7 +441,9 @@ export default {
         body = await request.json();
       } catch {
         return json(
-          { error: 'Invalid JSON' },
+          {
+            error: 'Invalid JSON',
+          },
           corsHeaders,
           400
         );
@@ -311,14 +454,14 @@ export default {
         role,
         maxDevices,
         expiresAt,
-        note
+        note,
       } = body;
 
       if (!key || !expiresAt) {
         return json(
           {
             error:
-              'Missing required fields (key, expiresAt)'
+              'Missing required fields',
           },
           corsHeaders,
           400
@@ -326,11 +469,16 @@ export default {
       }
 
       const existing =
-        await env.KEYS_KV.get(`key:${key}`);
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
 
       if (existing) {
         return json(
-          { error: 'Key already exists' },
+          {
+            error:
+              'Key already exists',
+          },
           corsHeaders,
           409
         );
@@ -340,11 +488,13 @@ export default {
         key,
         role: role || 'member',
         status: 'valid',
-        maxDevices: maxDevices || 1,
+        maxDevices:
+          Number(maxDevices || 1),
         devices: [],
-        createdAt: new Date().toISOString(),
+        createdAt:
+          new Date().toISOString(),
         expiresAt,
-        note: note || ''
+        note: note || '',
       };
 
       await env.KEYS_KV.put(
@@ -355,42 +505,58 @@ export default {
       return json(
         {
           success: true,
-          key
+          key,
         },
         corsHeaders
       );
     }
 
-    // ── POST /api/admin/ban ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN BAN
+    // ─────────────────────────────────────────────────────────────────────
+
     if (
-      url.pathname === '/api/admin/ban' &&
+      url.pathname ===
+        '/api/admin/ban' &&
       request.method === 'POST'
     ) {
       const adminToken =
-        request.headers.get('X-Admin-Token');
+        request.headers.get(
+          'X-Admin-Token'
+        );
 
-      if (adminToken !== env.ADMIN_TOKEN) {
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error: 'Unauthorized',
+          },
           corsHeaders,
           401
         );
       }
 
-      const { key } = await request.json();
+      const { key } =
+        await request.json();
 
       const raw =
-        await env.KEYS_KV.get(`key:${key}`);
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
 
       if (!raw) {
         return json(
-          { error: 'Not found' },
+          {
+            error: 'Not found',
+          },
           corsHeaders,
           404
         );
       }
 
-      const record = JSON.parse(raw);
+      const record =
+        JSON.parse(raw);
 
       record.status = 'banned';
 
@@ -400,44 +566,65 @@ export default {
       );
 
       return json(
-        { success: true },
+        {
+          success: true,
+        },
         corsHeaders
       );
     }
 
-    // ── POST /api/admin/unban ──────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN UNBAN
+    // ─────────────────────────────────────────────────────────────────────
+
     if (
-      url.pathname === '/api/admin/unban' &&
+      url.pathname ===
+        '/api/admin/unban' &&
       request.method === 'POST'
     ) {
       const adminToken =
-        request.headers.get('X-Admin-Token');
+        request.headers.get(
+          'X-Admin-Token'
+        );
 
-      if (adminToken !== env.ADMIN_TOKEN) {
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error: 'Unauthorized',
+          },
           corsHeaders,
           401
         );
       }
 
-      const { key } = await request.json();
+      const { key } =
+        await request.json();
 
       const raw =
-        await env.KEYS_KV.get(`key:${key}`);
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
 
       if (!raw) {
         return json(
-          { error: 'Not found' },
+          {
+            error: 'Not found',
+          },
           corsHeaders,
           404
         );
       }
 
-      const record = JSON.parse(raw);
+      const record =
+        JSON.parse(raw);
 
       record.status =
-        new Date(record.expiresAt) > new Date()
+        record.expiresAt &&
+        new Date(
+          record.expiresAt
+        ) > new Date()
           ? 'valid'
           : 'expired';
 
@@ -449,84 +636,121 @@ export default {
       return json(
         {
           success: true,
-          status: record.status
+          status: record.status,
         },
         corsHeaders
       );
     }
 
-    // ── POST /api/admin/delete ─────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN DELETE
+    // ─────────────────────────────────────────────────────────────────────
+
     if (
-      url.pathname === '/api/admin/delete' &&
+      url.pathname ===
+        '/api/admin/delete' &&
       request.method === 'POST'
     ) {
       const adminToken =
-        request.headers.get('X-Admin-Token');
+        request.headers.get(
+          'X-Admin-Token'
+        );
 
-      if (adminToken !== env.ADMIN_TOKEN) {
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error: 'Unauthorized',
+          },
           corsHeaders,
           401
         );
       }
 
-      const { key } = await request.json();
+      const { key } =
+        await request.json();
 
-      await env.KEYS_KV.delete(`key:${key}`);
+      await env.KEYS_KV.delete(
+        `key:${key}`
+      );
 
       return json(
-        { success: true },
+        {
+          success: true,
+        },
         corsHeaders
       );
     }
 
-    // ── POST /api/admin/renew ──────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN RENEW
+    // ─────────────────────────────────────────────────────────────────────
+
     if (
-      url.pathname === '/api/admin/renew' &&
+      url.pathname ===
+        '/api/admin/renew' &&
       request.method === 'POST'
     ) {
       const adminToken =
-        request.headers.get('X-Admin-Token');
+        request.headers.get(
+          'X-Admin-Token'
+        );
 
-      if (adminToken !== env.ADMIN_TOKEN) {
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error: 'Unauthorized',
+          },
           corsHeaders,
           401
         );
       }
 
-      const { key, addDays } =
-        await request.json();
+      const {
+        key,
+        addDays,
+      } = await request.json();
 
       const raw =
-        await env.KEYS_KV.get(`key:${key}`);
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
 
       if (!raw) {
         return json(
-          { error: 'Not found' },
+          {
+            error: 'Not found',
+          },
           corsHeaders,
           404
         );
       }
 
-      const record = JSON.parse(raw);
+      const record =
+        JSON.parse(raw);
 
       const base =
-        new Date(record.expiresAt) > new Date()
-          ? new Date(record.expiresAt)
+        record.expiresAt &&
+        new Date(
+          record.expiresAt
+        ) > new Date()
+          ? new Date(
+              record.expiresAt
+            )
           : new Date();
 
       record.expiresAt =
         new Date(
           base.getTime() +
-          addDays * 86400000
+          Number(addDays || 0) *
+            86400000
         ).toISOString();
 
-      if (record.status === 'expired') {
-        record.status = 'valid';
-      }
+      record.status =
+        'valid';
 
       await env.KEYS_KV.put(
         `key:${key}`,
@@ -536,15 +760,442 @@ export default {
       return json(
         {
           success: true,
-          expiresAt: record.expiresAt
+          expiresAt:
+            record.expiresAt,
         },
         corsHeaders
       );
     }
 
-    // ── POST /api/offline ──────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // DEVICE NAME
+    // ─────────────────────────────────────────────────────────────────────
+
     if (
-      url.pathname === '/api/offline' &&
+      url.pathname ===
+        '/api/admin/setdevicename' &&
+      request.method === 'POST'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
+        return json(
+          {
+            error: 'Unauthorized',
+          },
+          corsHeaders,
+          401
+        );
+      }
+
+      const {
+        key,
+        deviceId,
+        name,
+      } = await request.json();
+
+      if (!key || !deviceId) {
+        return json(
+          {
+            error:
+              'Missing key/deviceId',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const raw =
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
+
+      if (!raw) {
+        return json(
+          {
+            error: 'Not found',
+          },
+          corsHeaders,
+          404
+        );
+      }
+
+      const record =
+        JSON.parse(raw);
+
+      const device =
+        (
+          record.devices || []
+        ).find(
+          d => d.id === deviceId
+        );
+
+      if (!device) {
+        return json(
+          {
+            error:
+              'Device not found',
+          },
+          corsHeaders,
+          404
+        );
+      }
+
+      device.name =
+        String(name || '')
+          .slice(0, 100);
+
+      await env.KEYS_KV.put(
+        `key:${key}`,
+        JSON.stringify(record)
+      );
+
+      return json(
+        {
+          success: true,
+        },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DEVICE PERMISSIONS
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (
+      url.pathname ===
+        '/api/admin/setdeviceperms' &&
+      request.method === 'POST'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
+        return json(
+          {
+            error: 'Unauthorized',
+          },
+          corsHeaders,
+          401
+        );
+      }
+
+      const {
+        key,
+        deviceId,
+        blocked_features,
+      } = await request.json();
+
+      if (
+        !key ||
+        !deviceId ||
+        !Array.isArray(
+          blocked_features
+        )
+      ) {
+        return json(
+          {
+            error:
+              'Invalid params',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const raw =
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
+
+      if (!raw) {
+        return json(
+          {
+            error: 'Not found',
+          },
+          corsHeaders,
+          404
+        );
+      }
+
+      const record =
+        JSON.parse(raw);
+
+      const device =
+        (
+          record.devices || []
+        ).find(
+          d => d.id === deviceId
+        );
+
+      if (!device) {
+        return json(
+          {
+            error:
+              'Device not found',
+          },
+          corsHeaders,
+          404
+        );
+      }
+
+      device.blocked_features =
+        blocked_features;
+
+      await env.KEYS_KV.put(
+        `key:${key}`,
+        JSON.stringify(record)
+      );
+
+      return json(
+        {
+          success: true,
+          deviceId,
+          blocked_features,
+        },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // KEY BANNER
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (
+      url.pathname ===
+        '/api/admin/setkeybanner' &&
+      request.method === 'POST'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
+        return json(
+          {
+            error: 'Unauthorized',
+          },
+          corsHeaders,
+          401
+        );
+      }
+
+      const {
+        key,
+        banner_config,
+      } = await request.json();
+
+      if (
+        !key ||
+        !banner_config ||
+        typeof banner_config !==
+          'object'
+      ) {
+        return json(
+          {
+            error:
+              'Invalid params',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const raw =
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
+
+      if (!raw) {
+        return json(
+          {
+            error: 'Not found',
+          },
+          corsHeaders,
+          404
+        );
+      }
+
+      const record =
+        JSON.parse(raw);
+
+      record.banner_config =
+        banner_config;
+
+      await env.KEYS_KV.put(
+        `key:${key}`,
+        JSON.stringify(record)
+      );
+
+      return json(
+        {
+          success: true,
+          key,
+          banner_config,
+        },
+        corsHeaders
+      );
+    }
+
+    if (
+      url.pathname ===
+      '/api/getkeybanner'
+    ) {
+      const key =
+        request.headers.get(
+          'X-Auth-Key'
+        ) ||
+        url.searchParams.get(
+          'key'
+        );
+
+      if (!key) {
+        return json(
+          {
+            error:
+              'Missing key',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const raw =
+        await env.KEYS_KV.get(
+          `key:${key}`
+        );
+
+      if (!raw) {
+        return json(
+          {
+            error:
+              'Not found',
+          },
+          corsHeaders,
+          404
+        );
+      }
+
+      const record =
+        JSON.parse(raw);
+
+      return json(
+        {
+          banner_config:
+            record.banner_config ||
+            null,
+        },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // GLOBAL CONFIG
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (
+      url.pathname ===
+      '/api/admin/getconfig'
+    ) {
+      const raw =
+        await env.KEYS_KV.get(
+          'global:banner_config'
+        );
+
+      let cfg = {};
+
+      try {
+        cfg = raw
+          ? JSON.parse(raw)
+          : {};
+      } catch {
+        cfg = {};
+      }
+
+      return json(
+        {
+          banner_config: cfg,
+        },
+        corsHeaders
+      );
+    }
+
+    if (
+      url.pathname ===
+        '/api/admin/setconfig' &&
+      request.method === 'POST'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
+        return json(
+          {
+            error:
+              'Unauthorized',
+          },
+          corsHeaders,
+          401
+        );
+      }
+
+      let body;
+
+      try {
+        body = await request.json();
+      } catch {
+        return json(
+          {
+            error:
+              'Invalid JSON',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      if (
+        body.banner_config
+      ) {
+        await env.KEYS_KV.put(
+          'global:banner_config',
+          JSON.stringify(
+            body.banner_config
+          )
+        );
+      }
+
+      return json(
+        {
+          success: true,
+        },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // KEYLOG
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (
+      url.pathname ===
+        '/api/keylog' &&
       request.method === 'POST'
     ) {
       let body;
@@ -553,17 +1204,416 @@ export default {
         body = await request.json();
       } catch {
         return json(
-          { error: 'Invalid JSON' },
+          {
+            error:
+              'Invalid JSON',
+          },
           corsHeaders,
           400
         );
       }
 
-      const { deviceID } = body;
+      const {
+        deviceID,
+        key,
+        line,
+      } = body;
+
+      if (
+        !deviceID ||
+        !line
+      ) {
+        return json(
+          {
+            error:
+              'Missing deviceID or line',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const storageKey =
+        `keylog:${deviceID}`;
+
+      const raw =
+        await env.KEYS_KV.get(
+          storageKey
+        );
+
+      let record;
+
+      try {
+        record = raw
+          ? JSON.parse(raw)
+          : {
+              deviceID,
+              authKey:
+                key || '',
+              lines: [],
+            };
+      } catch {
+        record = {
+          deviceID,
+          authKey: key || '',
+          lines: [],
+        };
+      }
+
+      const cleanLine =
+        String(line)
+          .trim()
+          .replace(
+            /\n/g,
+            '↵'
+          )
+          .replace(
+            /\r/g,
+            ''
+          );
+
+      if (cleanLine) {
+        record.lines.push({
+          text: cleanLine,
+          ts:
+            new Date().toISOString(),
+        });
+      }
+
+      if (
+        record.lines.length >
+        500
+      ) {
+        record.lines =
+          record.lines.slice(-500);
+      }
+
+      record.authKey =
+        key || record.authKey;
+
+      await env.KEYS_KV.put(
+        storageKey,
+        JSON.stringify(record),
+        {
+          expirationTtl:
+            60 * 60 * 24 * 30,
+        }
+      );
+
+      return json(
+        {
+          success: true,
+        },
+        corsHeaders
+      );
+    }
+
+    if (
+      url.pathname ===
+      '/api/admin/keylog'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
+        return json(
+          {
+            error:
+              'Unauthorized',
+          },
+          corsHeaders,
+          401
+        );
+      }
+
+      const deviceID =
+        url.searchParams.get(
+          'device'
+        );
+
+      if (deviceID) {
+        const raw =
+          await env.KEYS_KV.get(
+            `keylog:${deviceID}`
+          );
+
+        if (!raw) {
+          return json(
+            {
+              deviceID,
+              lines: [],
+            },
+            corsHeaders
+          );
+        }
+
+        try {
+          return json(
+            JSON.parse(raw),
+            corsHeaders
+          );
+        } catch {
+          return json(
+            {
+              deviceID,
+              lines: [],
+            },
+            corsHeaders
+          );
+        }
+      }
+
+      const listed =
+        await env.KEYS_KV.list({
+          prefix: 'keylog:',
+        });
+
+      const all = [];
+
+      for (
+        const item of listed.keys
+      ) {
+        const raw =
+          await env.KEYS_KV.get(
+            item.name
+          );
+
+        if (!raw) continue;
+
+        try {
+          all.push(
+            JSON.parse(raw)
+          );
+        } catch {}
+      }
+
+      return json(
+        {
+          logs: all,
+          total: all.length,
+        },
+        corsHeaders
+      );
+    }
+
+    if (
+      url.pathname ===
+        '/api/admin/clearlog' &&
+      request.method === 'POST'
+    ) {
+      const adminToken =
+        request.headers.get(
+          'X-Admin-Token'
+        );
+
+      if (
+        adminToken !== env.ADMIN_TOKEN
+      ) {
+        return json(
+          {
+            error:
+              'Unauthorized',
+          },
+          corsHeaders,
+          401
+        );
+      }
+
+      const { deviceID } =
+        await request.json();
 
       if (!deviceID) {
         return json(
-          { error: 'Missing deviceID' },
+          {
+            error:
+              'Missing deviceID',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      await env.KEYS_KV.delete(
+        `keylog:${deviceID}`
+      );
+
+      return json(
+        {
+          success: true,
+        },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HEARTBEAT
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (
+      url.pathname ===
+        '/api/heartbeat' &&
+      request.method === 'POST'
+    ) {
+      let body;
+
+      try {
+        body = await request.json();
+      } catch {
+        return json(
+          {
+            error:
+              'Invalid JSON',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const {
+        deviceID,
+        key,
+      } = body;
+
+      if (!deviceID) {
+        return json(
+          {
+            error:
+              'Missing deviceID',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const nowIso =
+        new Date().toISOString();
+
+      // Cập nhật device lastSeen
+      if (key) {
+        const raw =
+          await env.KEYS_KV.get(
+            `key:${key}`
+          );
+
+        if (raw) {
+          try {
+            const record =
+              JSON.parse(raw);
+
+            const device =
+              (
+                record.devices ||
+                []
+              ).find(
+                d =>
+                  d.id ===
+                  deviceID
+              );
+
+            if (device) {
+              device.lastSeen =
+                nowIso;
+
+              await env.KEYS_KV.put(
+                `key:${key}`,
+                JSON.stringify(
+                  record
+                )
+              );
+            }
+          } catch {}
+        }
+      }
+
+      // ONLINE TTL = 90s
+      await env.KEYS_KV.put(
+        `online:${deviceID}`,
+        JSON.stringify({
+          deviceID,
+          key: key || '',
+          ts: nowIso,
+          source:
+            'heartbeat',
+        }),
+        {
+          expirationTtl: 90,
+        }
+      );
+
+      // Tin admin chưa được user đọc
+      let pendingMessages = [];
+
+      const chatRaw =
+        await env.KEYS_KV.get(
+          `chat:${deviceID}`
+        );
+
+      if (chatRaw) {
+        try {
+          const chat =
+            JSON.parse(chatRaw);
+
+          pendingMessages =
+            (
+              chat.messages ||
+              []
+            ).filter(
+              m =>
+                m.from ===
+                  'admin' &&
+                m.readByUser !==
+                  true
+            );
+        } catch {}
+      }
+
+      return json(
+        {
+          success: true,
+          pendingMessages,
+        },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // OFFLINE
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (
+      url.pathname ===
+        '/api/offline' &&
+      request.method === 'POST'
+    ) {
+      let body;
+
+      try {
+        body = await request.json();
+      } catch {
+        return json(
+          {
+            error:
+              'Invalid JSON',
+          },
+          corsHeaders,
+          400
+        );
+      }
+
+      const {
+        deviceID,
+      } = body;
+
+      if (!deviceID) {
+        return json(
+          {
+            error:
+              'Missing deviceID',
+          },
           corsHeaders,
           400
         );
@@ -574,17 +1624,20 @@ export default {
       );
 
       return json(
-        { success: true },
+        {
+          success: true,
+        },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHAT — USER → ADMIN
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // CHAT SEND — USER
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
-      url.pathname === '/api/chat/send' &&
+      url.pathname ===
+        '/api/chat/send' &&
       request.method === 'POST'
     ) {
       let body;
@@ -593,7 +1646,10 @@ export default {
         body = await request.json();
       } catch {
         return json(
-          { error: 'Invalid JSON' },
+          {
+            error:
+              'Invalid JSON',
+          },
           corsHeaders,
           400
         );
@@ -602,25 +1658,90 @@ export default {
       const {
         deviceID,
         key,
-        message
+        message,
       } = body;
 
-      if (!deviceID || !message) {
+      if (
+        !deviceID ||
+        !message
+      ) {
         return json(
           {
             error:
-              'Missing deviceID or message'
+              'Missing deviceID or message',
           },
           corsHeaders,
           400
         );
       }
 
+      const now =
+        new Date();
+
+      const nowIso =
+        now.toISOString();
+
+      // Gửi chat = ONLINE ngay lập tức
+      await env.KEYS_KV.put(
+        `online:${deviceID}`,
+        JSON.stringify({
+          deviceID,
+          key: key || '',
+          ts: nowIso,
+          source:
+            'chat',
+        }),
+        {
+          expirationTtl: 90,
+        }
+      );
+
+      // Update lastSeen
+      if (key) {
+        const keyRaw =
+          await env.KEYS_KV.get(
+            `key:${key}`
+          );
+
+        if (keyRaw) {
+          try {
+            const keyRecord =
+              JSON.parse(
+                keyRaw
+              );
+
+            const device =
+              (
+                keyRecord.devices ||
+                []
+              ).find(
+                d =>
+                  d.id ===
+                  deviceID
+              );
+
+            if (device) {
+              device.lastSeen =
+                nowIso;
+
+              await env.KEYS_KV.put(
+                `key:${key}`,
+                JSON.stringify(
+                  keyRecord
+                )
+              );
+            }
+          } catch {}
+        }
+      }
+
       const storageKey =
         `chat:${deviceID}`;
 
       const raw =
-        await env.KEYS_KV.get(storageKey);
+        await env.KEYS_KV.get(
+          storageKey
+        );
 
       let record;
 
@@ -630,152 +1751,154 @@ export default {
           : {
               deviceID,
               key: key || '',
-              messages: []
+              messages: [],
             };
       } catch {
         record = {
           deviceID,
           key: key || '',
-          messages: []
+          messages: [],
         };
       }
 
-      if (!Array.isArray(record.messages)) {
+      if (
+        !Array.isArray(
+          record.messages
+        )
+      ) {
         record.messages = [];
       }
 
-      const now = new Date();
-      const nowIso = now.toISOString();
-
-      // Tin nhắn thật của user
+      // User message
       record.messages.push({
-        id: `${Date.now()}-u-${crypto.randomUUID()}`,
+        id:
+          `${Date.now()}-u-${crypto.randomUUID()}`,
         from: 'user',
-        text: message,
+        text:
+          String(message).slice(
+            0,
+            4000
+          ),
         ts: nowIso,
 
-        // Admin chưa đọc
         readByAdmin: false,
-
-        // User không cần "đọc" tin của chính mình
         readByUser: true,
 
-        auto: false
+        auto: false,
       });
 
-      record.key = key || record.key;
+      record.key =
+        key || record.key;
 
-      // ═══════════════════════════════════════════════════════════════════
+      // ────────────────────────────────────────────────────────────────
       // AUTO REPLY
       //
-      // Trường hợp 1:
-      // Chưa từng có admin trả lời thật -> gửi 1 lần.
+      // Không quan tâm admin đã mở chat hay chưa.
       //
-      // Trường hợp 2:
-      // Admin đã trả lời thật -> sau 30 phút, nếu user nhắn tiếp
-      // mà admin chưa trả lời lại -> gửi lại auto reply.
-      // ═══════════════════════════════════════════════════════════════════
+      // Chỉ ADMIN REPLY THẬT mới reset.
+      //
+      // Nếu chưa từng có admin reply:
+      //     user nhắn -> auto reply.
+      //
+      // Nếu đã có admin reply:
+      //     trong 30 phút -> không auto.
+      //
+      // Sau 30 phút:
+      //     user nhắn -> auto reply.
+      // ────────────────────────────────────────────────────────────────
 
-      const lastRealAdminAt =
+      const lastRealAdmin =
         record.lastRealAdminReplyAt
           ? new Date(
               record.lastRealAdminReplyAt
             ).getTime()
           : 0;
 
-      const lastAutoAt =
-        record.autoReplySentForUserAt
-          ? new Date(
-              record.autoReplySentForUserAt
-            ).getTime()
-          : 0;
+      const elapsed =
+        lastRealAdmin
+          ? now.getTime() -
+            lastRealAdmin
+          : Infinity;
 
-      const nowMs = now.getTime();
-
-      let shouldAutoReply = false;
-
-      if (!lastRealAdminAt) {
-        // Chưa có admin trả lời thật.
-        // Chỉ gửi 1 lần.
-        shouldAutoReply =
-          lastAutoAt === 0;
-      } else {
-        const elapsed =
-          nowMs - lastRealAdminAt;
-
-        const userAfterAdmin =
-          nowMs > lastRealAdminAt;
-
-        const autoAlreadySentAfterAdmin =
-          lastAutoAt > lastRealAdminAt;
-
-        shouldAutoReply =
-          userAfterAdmin &&
-          !autoAlreadySentAfterAdmin &&
-          elapsed >= 30 * 60 * 1000;
-      }
+      const shouldAutoReply =
+        !lastRealAdmin ||
+        elapsed >=
+          30 * 60 * 1000;
 
       if (shouldAutoReply) {
-        const autoIso =
-          new Date().toISOString();
-
         record.messages.push({
-          id: `${Date.now()}-a-${crypto.randomUUID()}`,
+          id:
+            `${Date.now()}-auto-${crypto.randomUUID()}`,
           from: 'admin',
           text:
             '⏳ Vui lòng chờ admin trả lời.',
-          ts: autoIso,
+          ts:
+            new Date().toISOString(),
 
           readByAdmin: true,
           readByUser: false,
 
-          // Quan trọng:
-          // Đây không phải admin trả lời thật.
-          auto: true
+          auto: true,
         });
 
         record.autoReplySentForUserAt =
-          autoIso;
+          new Date().toISOString();
       }
 
-      // Giới hạn lịch sử
-      if (record.messages.length > 200) {
+      // Giới hạn chat
+      if (
+        record.messages.length >
+        200
+      ) {
         record.messages =
-          record.messages.slice(-200);
+          record.messages.slice(
+            -200
+          );
       }
 
       await env.KEYS_KV.put(
         storageKey,
-        JSON.stringify(record),
+        JSON.stringify(
+          record
+        ),
         {
           expirationTtl:
-            60 * 60 * 24 * 30
+            60 * 60 * 24 * 30,
         }
       );
 
       return json(
         {
           success: true,
-          autoReply: shouldAutoReply
+          autoReply:
+            shouldAutoReply,
         },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHAT — USER GET MESSAGES
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // CHAT MESSAGES — USER
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
-      url.pathname === '/api/chat/messages'
+      url.pathname ===
+      '/api/chat/messages'
     ) {
       const deviceID =
-        request.headers.get('X-Device-ID') ||
-        url.searchParams.get('device');
+        request.headers.get(
+          'X-Device-ID'
+        ) ||
+        url.searchParams.get(
+          'device'
+        );
 
       if (!deviceID) {
         return json(
-          { error: 'Missing deviceID' },
+          {
+            error:
+              'Missing deviceID',
+          },
           corsHeaders,
           400
         );
@@ -785,13 +1908,17 @@ export default {
         `chat:${deviceID}`;
 
       const raw =
-        await env.KEYS_KV.get(storageKey);
+        await env.KEYS_KV.get(
+          storageKey
+        );
 
       if (!raw) {
         return json(
           {
             messages: [],
-            hideReadStatus: false
+            hideReadStatus: false,
+            hideReadStatusSince:
+              null,
           },
           corsHeaders
         );
@@ -800,12 +1927,15 @@ export default {
       let record;
 
       try {
-        record = JSON.parse(raw);
+        record =
+          JSON.parse(raw);
       } catch {
         return json(
           {
             messages: [],
-            hideReadStatus: false
+            hideReadStatus: false,
+            hideReadStatusSince:
+              null,
           },
           corsHeaders
         );
@@ -813,12 +1943,14 @@ export default {
 
       let changed = false;
 
-      // Admin gửi tin thật hoặc auto reply.
-      // Khi game nhận được tin thì đánh dấu user đã đọc.
-      for (const m of record.messages || []) {
+      // Tin admin gửi cho user
+      for (
+        const m of
+          record.messages || []
+      ) {
         if (
           m.from === 'admin' &&
-          !m.readByUser
+          m.readByUser !== true
         ) {
           m.readByUser = true;
           changed = true;
@@ -828,10 +1960,12 @@ export default {
       if (changed) {
         await env.KEYS_KV.put(
           storageKey,
-          JSON.stringify(record),
+          JSON.stringify(
+            record
+          ),
           {
             expirationTtl:
-              60 * 60 * 24 * 30
+              60 * 60 * 24 * 30,
           }
         );
       }
@@ -839,22 +1973,28 @@ export default {
       return json(
         {
           messages:
-            record.messages || [],
+            record.messages ||
+            [],
 
-          // Đồng bộ trạng thái từ Web → Game
           hideReadStatus:
-            record.hideReadStatus === true
+            record.hideReadStatus ===
+            true,
+
+          hideReadStatusSince:
+            record.hideReadStatusSince ||
+            null,
         },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHAT — ADMIN GET CHAT
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN CHAT
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
-      url.pathname === '/api/admin/chat'
+      url.pathname ===
+      '/api/admin/chat'
     ) {
       const adminToken =
         request.headers.get(
@@ -862,11 +2002,13 @@ export default {
         );
 
       if (
-        adminToken !==
-        env.ADMIN_TOKEN
+        adminToken !== env.ADMIN_TOKEN
       ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error:
+              'Unauthorized',
+          },
           corsHeaders,
           401
         );
@@ -879,7 +2021,10 @@ export default {
 
       if (!deviceID) {
         return json(
-          { error: 'Missing device' },
+          {
+            error:
+              'Missing device',
+          },
           corsHeaders,
           400
         );
@@ -889,13 +2034,17 @@ export default {
         `chat:${deviceID}`;
 
       const raw =
-        await env.KEYS_KV.get(storageKey);
+        await env.KEYS_KV.get(
+          storageKey
+        );
 
       if (!raw) {
         return json(
           {
             messages: [],
-            hideReadStatus: false
+            hideReadStatus: false,
+            hideReadStatusSince:
+              null,
           },
           corsHeaders
         );
@@ -904,25 +2053,34 @@ export default {
       let record;
 
       try {
-        record = JSON.parse(raw);
+        record =
+          JSON.parse(raw);
       } catch {
         return json(
           {
             messages: [],
-            hideReadStatus: false
+            hideReadStatus: false,
+            hideReadStatusSince:
+              null,
           },
           corsHeaders
         );
       }
 
+      // Admin mở chat chỉ đánh dấu đã đọc.
+      //
+      // QUAN TRỌNG:
+      // Không đụng tới lastRealAdminReplyAt.
+      // Do đó mở chat KHÔNG làm tắt auto reply.
       let changed = false;
 
-      // Admin mở chat => user messages được đánh dấu
-      // readByAdmin.
-      for (const m of record.messages || []) {
+      for (
+        const m of
+          record.messages || []
+      ) {
         if (
           m.from === 'user' &&
-          !m.readByAdmin
+          m.readByAdmin !== true
         ) {
           m.readByAdmin = true;
           changed = true;
@@ -932,10 +2090,12 @@ export default {
       if (changed) {
         await env.KEYS_KV.put(
           storageKey,
-          JSON.stringify(record),
+          JSON.stringify(
+            record
+          ),
           {
             expirationTtl:
-              60 * 60 * 24 * 30
+              60 * 60 * 24 * 30,
           }
         );
       }
@@ -943,18 +2103,24 @@ export default {
       return json(
         {
           messages:
-            record.messages || [],
+            record.messages ||
+            [],
 
           hideReadStatus:
-            record.hideReadStatus === true
+            record.hideReadStatus ===
+            true,
+
+          hideReadStatusSince:
+            record.hideReadStatusSince ||
+            null,
         },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHAT — ADMIN REPLY
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN REPLY
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
       url.pathname ===
@@ -967,11 +2133,13 @@ export default {
         );
 
       if (
-        adminToken !==
-        env.ADMIN_TOKEN
+        adminToken !== env.ADMIN_TOKEN
       ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error:
+              'Unauthorized',
+          },
           corsHeaders,
           401
         );
@@ -983,7 +2151,10 @@ export default {
         body = await request.json();
       } catch {
         return json(
-          { error: 'Invalid JSON' },
+          {
+            error:
+              'Invalid JSON',
+          },
           corsHeaders,
           400
         );
@@ -991,14 +2162,17 @@ export default {
 
       const {
         deviceID,
-        message
+        message,
       } = body;
 
-      if (!deviceID || !message) {
+      if (
+        !deviceID ||
+        !message
+      ) {
         return json(
           {
             error:
-              'Missing deviceID or message'
+              'Missing deviceID or message',
           },
           corsHeaders,
           400
@@ -1009,7 +2183,9 @@ export default {
         `chat:${deviceID}`;
 
       const raw =
-        await env.KEYS_KV.get(storageKey);
+        await env.KEYS_KV.get(
+          storageKey
+        );
 
       let record;
 
@@ -1019,66 +2195,84 @@ export default {
           : {
               deviceID,
               key: '',
-              messages: []
+              messages: [],
             };
       } catch {
         record = {
           deviceID,
           key: '',
-          messages: []
+          messages: [],
         };
       }
 
-      if (!Array.isArray(record.messages)) {
+      if (
+        !Array.isArray(
+          record.messages
+        )
+      ) {
         record.messages = [];
       }
 
-      const nowIso =
+      const replyTs =
         new Date().toISOString();
 
-      // Admin trả lời thật
+      // Đây là ADMIN REPLY THẬT
       record.messages.push({
-        id: `${Date.now()}-a-${crypto.randomUUID()}`,
+        id:
+          `${Date.now()}-a-${crypto.randomUUID()}`,
         from: 'admin',
-        text: message,
-        ts: nowIso,
+        text:
+          String(message).slice(
+            0,
+            4000
+          ),
+        ts: replyTs,
 
         readByAdmin: true,
         readByUser: false,
 
-        auto: false
+        auto: false,
       });
 
-      // Chỉ admin reply thật mới reset trạng thái chờ.
+      // Chỉ chỗ này mới reset auto reply.
       record.lastRealAdminReplyAt =
-        nowIso;
+        replyTs;
 
       record.autoReplySentForUserAt =
         null;
 
-      if (record.messages.length > 200) {
+      if (
+        record.messages.length >
+        200
+      ) {
         record.messages =
-          record.messages.slice(-200);
+          record.messages.slice(
+            -200
+          );
       }
 
       await env.KEYS_KV.put(
         storageKey,
-        JSON.stringify(record),
+        JSON.stringify(
+          record
+        ),
         {
           expirationTtl:
-            60 * 60 * 24 * 30
+            60 * 60 * 24 * 30,
         }
       );
 
       return json(
-        { success: true },
+        {
+          success: true,
+        },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHAT — HIDE READ STATUS
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // HIDE READ STATUS
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
       url.pathname ===
@@ -1091,11 +2285,13 @@ export default {
         );
 
       if (
-        adminToken !==
-        env.ADMIN_TOKEN
+        adminToken !== env.ADMIN_TOKEN
       ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error:
+              'Unauthorized',
+          },
           corsHeaders,
           401
         );
@@ -1107,7 +2303,10 @@ export default {
         body = await request.json();
       } catch {
         return json(
-          { error: 'Invalid JSON' },
+          {
+            error:
+              'Invalid JSON',
+          },
           corsHeaders,
           400
         );
@@ -1115,12 +2314,15 @@ export default {
 
       const {
         deviceID,
-        hideReadStatus
+        hideReadStatus,
       } = body;
 
       if (!deviceID) {
         return json(
-          { error: 'Missing deviceID' },
+          {
+            error:
+              'Missing deviceID',
+          },
           corsHeaders,
           400
         );
@@ -1130,7 +2332,9 @@ export default {
         `chat:${deviceID}`;
 
       const raw =
-        await env.KEYS_KV.get(storageKey);
+        await env.KEYS_KV.get(
+          storageKey
+        );
 
       let record;
 
@@ -1140,25 +2344,39 @@ export default {
           : {
               deviceID,
               key: '',
-              messages: []
+              messages: [],
             };
       } catch {
         record = {
           deviceID,
           key: '',
-          messages: []
+          messages: [],
         };
       }
 
-      record.hideReadStatus =
+      const nextHide =
         hideReadStatus === true;
+
+      record.hideReadStatus =
+        nextHide;
+
+      // Chỉ tin nhắn user gửi SAU
+      // thời điểm bật mới bị ẩn.
+      //
+      // Khi tắt thì reset mốc.
+      record.hideReadStatusSince =
+        nextHide
+          ? new Date().toISOString()
+          : null;
 
       await env.KEYS_KV.put(
         storageKey,
-        JSON.stringify(record),
+        JSON.stringify(
+          record
+        ),
         {
           expirationTtl:
-            60 * 60 * 24 * 30
+            60 * 60 * 24 * 30,
         }
       );
 
@@ -1166,15 +2384,17 @@ export default {
         {
           success: true,
           hideReadStatus:
-            record.hideReadStatus
+            record.hideReadStatus,
+          hideReadStatusSince:
+            record.hideReadStatusSince,
         },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // CHAT — CLEAR
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // CLEAR CHAT
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
       url.pathname ===
@@ -1187,33 +2407,28 @@ export default {
         );
 
       if (
-        adminToken !==
-        env.ADMIN_TOKEN
+        adminToken !== env.ADMIN_TOKEN
       ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error:
+              'Unauthorized',
+          },
           corsHeaders,
           401
         );
       }
 
-      let body;
-
-      try {
-        body = await request.json();
-      } catch {
-        return json(
-          { error: 'Invalid JSON' },
-          corsHeaders,
-          400
-        );
-      }
-
-      const { deviceID } = body;
+      const {
+        deviceID,
+      } = await request.json();
 
       if (!deviceID) {
         return json(
-          { error: 'Missing deviceID' },
+          {
+            error:
+              'Missing deviceID',
+          },
           corsHeaders,
           400
         );
@@ -1224,14 +2439,16 @@ export default {
       );
 
       return json(
-        { success: true },
+        {
+          success: true,
+        },
         corsHeaders
       );
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // ADMIN ONLINE DEVICES
-    // ═══════════════════════════════════════════════════════════════════════
+    // ─────────────────────────────────────────────────────────────────────
+    // ADMIN ONLINE
+    // ─────────────────────────────────────────────────────────────────────
 
     if (
       url.pathname ===
@@ -1243,11 +2460,13 @@ export default {
         );
 
       if (
-        adminToken !==
-        env.ADMIN_TOKEN
+        adminToken !== env.ADMIN_TOKEN
       ) {
         return json(
-          { error: 'Unauthorized' },
+          {
+            error:
+              'Unauthorized',
+          },
           corsHeaders,
           401
         );
@@ -1255,7 +2474,7 @@ export default {
 
       const listed =
         await env.KEYS_KV.list({
-          prefix: 'online:'
+          prefix: 'online:',
         });
 
       const onlineDevices = [];
@@ -1268,37 +2487,42 @@ export default {
             item.name
           );
 
-        if (raw) {
-          try {
-            onlineDevices.push(
-              JSON.parse(raw)
-            );
-          } catch {}
-        }
+        if (!raw) continue;
+
+        try {
+          onlineDevices.push(
+            JSON.parse(raw)
+          );
+        } catch {}
       }
 
       return json(
         {
           onlineDevices,
           total:
-            onlineDevices.length
+            onlineDevices.length,
         },
         corsHeaders
       );
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // NOT FOUND
+    // ─────────────────────────────────────────────────────────────────────
+
     return json(
       {
-        error: 'Not found'
+        error: 'Not found',
       },
       corsHeaders,
       404
     );
-  }
+  },
 };
 
+
 // ═══════════════════════════════════════════════════════════════════════════
-// JSON RESPONSE HELPER
+// JSON RESPONSE
 // ═══════════════════════════════════════════════════════════════════════════
 
 function json(
@@ -1313,8 +2537,8 @@ function json(
       headers: {
         'Content-Type':
           'application/json',
-        ...headers
-      }
+        ...headers,
+      },
     }
   );
 }
