@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod7</title>
+<title>🔐 Key Manager - LQ Mod6</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1795,6 +1795,7 @@ let _chatAdminDevice = null;
 let _chatAdminKey    = null;
 let _chatPollTimer   = null;
 let _chatHideRead    = false;
+let _chatHideReadSince = null;
 
 async function openChatAdmin(deviceID, key) {
   _chatAdminDevice = deviceID;
@@ -1810,7 +1811,9 @@ async function openChatAdmin(deviceID, key) {
   try {
     const chatData = await apiGet(`/api/admin/chat?device=${encodeURIComponent(deviceID)}`);
     if (chatData.hideReadStatus !== undefined) {
-      document.getElementById('chat-hide-read').checked = chatData.hideReadStatus === true;
+      _chatHideRead = chatData.hideReadStatus === true;
+      _chatHideReadSince = chatData.hideReadStatusSince || null;
+      document.getElementById('chat-hide-read').checked = _chatHideRead;
     }
   } catch {}
 
@@ -1823,13 +1826,16 @@ function closeChatAdmin() {
   document.getElementById('chat-admin-modal').style.display = 'none';
   _chatAdminDevice = null;
   _chatAdminKey = null;
+  _chatHideReadSince = null;
 }
 
 async function _chatHideReadChanged() {
   const checked = document.getElementById('chat-hide-read').checked;
   if (!_chatAdminDevice) return;
   try {
-    await apiPost('/api/admin/chat/sethideread', { deviceID: _chatAdminDevice, hideReadStatus: checked });
+    const result = await apiPost('/api/admin/chat/sethideread', { deviceID: _chatAdminDevice, hideReadStatus: checked });
+    _chatHideRead = result.hideReadStatus === true;
+    _chatHideReadSince = result.hideReadStatusSince || null;
   } catch {}
   _chatRender(_chatLastMessages || []);
 }
@@ -1841,6 +1847,9 @@ async function _chatLoad() {
   try {
     const data = await apiGet(`/api/admin/chat?device=${encodeURIComponent(_chatAdminDevice)}`);
     _chatLastMessages = data.messages || [];
+    _chatHideRead = data.hideReadStatus === true;
+    _chatHideReadSince = data.hideReadStatusSince || null;
+    document.getElementById('chat-hide-read').checked = _chatHideRead;
     _chatRender(_chatLastMessages);
     // Cập nhật badge unread trên key list
     const k = keys.find(k => k.key === _chatAdminKey);
@@ -1858,12 +1867,13 @@ function _chatRender(messages) {
     box.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px;font-size:13px">Chưa có tin nhắn nào.</div>';
     return;
   }
+  const hide = document.getElementById('chat-hide-read').checked;
   box.innerHTML = messages.map(m => {
     const isAdmin = m.from === 'admin';
     const ts = m.ts ? new Date(m.ts).toLocaleString('vi-VN') : '';
     const readTick = isAdmin
-      ? (m.auto ? '<span style="color:#f59e0b;font-size:11px"> ⏳ Tự động</span>' : (m.readByUser ? '<span style="color:#22c55e;font-size:11px"> ✓✓ Đã xem</span>' : '<span style="color:var(--text2);font-size:11px"> ✓ Đã gửi</span>'))
-      : (m.readByAdmin ? '<span style="color:#22c55e;font-size:11px"> ✓✓ Admin đã xem</span>' : '<span style="color:var(--text2);font-size:11px"> ✓ Chưa đọc</span>');
+      ? (m.readByUser ? '<span style="color:#22c55e;font-size:11px"> ✓✓ Đã xem</span>' : '<span style="color:var(--text2);font-size:11px"> ✓ Đã gửi</span>')
+      : '';
     return `
       <div style="display:flex;flex-direction:column;align-items:${isAdmin?'flex-end':'flex-start'};margin-bottom:8px">
         <div style="max-width:78%;background:${isAdmin?'#7c3aed':'var(--surface2)'};color:${isAdmin?'#fff':'var(--text)'};
@@ -1935,7 +1945,7 @@ document.addEventListener('keydown', function(e) {
     <h3 id="chat-admin-title" style="margin:0 0 10px;font-size:15px">💬 Chat</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
       <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
-        <input type="checkbox" id="chat-hide-read" onchange="_chatHideReadChanged()"> Ẩn trạng thái đã xem trên menu người dùng
+        <input type="checkbox" id="chat-hide-read" onchange="_chatHideReadChanged()"> Ẩn tin đã xem
       </label>
       <button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="_chatLoad()">🔄 Refresh</button>
       <button class="btn" style="font-size:12px;background:var(--red);color:#fff" onclick="chatAdminClear()">🗑 Xoá chat</button>
