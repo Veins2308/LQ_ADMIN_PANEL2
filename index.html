@@ -320,6 +320,7 @@
       <div class="stat-card"><div class="val" id="s-expired" style="color:var(--orange)">—</div><div class="lbl">Hết hạn</div></div>
       <div class="stat-card"><div class="val" id="s-banned" style="color:var(--red)">—</div><div class="lbl">Bị ban</div></div>
       <div class="stat-card"><div class="val" id="s-devices" style="color:var(--accent2)">—</div><div class="lbl">Thiết bị đăng nhập</div></div>
+      <div class="stat-card"><div class="val" id="s-online" style="color:#22c55e">—</div><div class="lbl">🟢 Đang online</div></div>
     </div>
 
     <!-- Toolbar -->
@@ -461,7 +462,11 @@
   <div class="modal">
     <button class="close" onclick="closeModal('devices-modal')">✕</button>
     <h2>📱 Thiết bị đang dùng key</h2>
-    <div id="devices-key-info" style="color:var(--text2);font-size:12px;margin-bottom:16px;font-family:monospace"></div>
+    <div id="devices-key-info" style="color:var(--text2);font-size:12px;margin-bottom:8px;font-family:monospace"></div>
+    <input type="text" id="device-search" placeholder="🔍 Tìm ID hoặc tên thiết bị..."
+      oninput="renderDevicesList(window._devicesCurrentKey, this.value.toLowerCase())"
+      style="width:100%;box-sizing:border-box;margin-bottom:12px;padding:8px 12px;background:var(--surface);
+             border:1px solid var(--border);color:var(--text);border-radius:8px;font-size:13px;outline:none">
     <div id="devices-list"></div>
   </div>
 </div>
@@ -785,7 +790,8 @@ function filterTable() {
 
   filteredKeys = keys.filter(k => {
     const effStatus = (k.status === 'valid' && new Date(k.expiresAt) < now) ? 'expired' : k.status;
-    const matchQ = !q || k.key.toLowerCase().includes(q) || (k.note||'').toLowerCase().includes(q) || (k.role||'').includes(q);
+    const deviceMatch = q && (k.devices||[]).some(d => d.id.toLowerCase().includes(q) || (d.name||'').toLowerCase().includes(q));
+    const matchQ = !q || k.key.toLowerCase().includes(q) || (k.note||'').toLowerCase().includes(q) || (k.role||'').includes(q) || deviceMatch;
     const matchS = !status || effStatus === status;
     const matchR = !role   || k.role === role;
     return matchQ && matchS && matchR;
@@ -806,11 +812,16 @@ function renderStats() {
   keys.filter(k => k.status === 'valid' && new Date(k.expiresAt) > now)
       .forEach(k => (k.devices||[]).forEach(d => deviceSet.add(d.id)));
 
+  // Tổng số thiết bị đang online
+  let totalOnline = 0;
+  keys.forEach(k => totalOnline += (k.onlineDevices || 0));
+
   document.getElementById('s-total').textContent   = keys.length;
   document.getElementById('s-active').textContent  = active;
   document.getElementById('s-expired').textContent = expired;
   document.getElementById('s-banned').textContent  = banned;
   document.getElementById('s-devices').textContent = deviceSet.size;
+  document.getElementById('s-online').textContent  = totalOnline;
 }
 
 // ════════════════════════════════════════════════════════
@@ -833,9 +844,11 @@ function renderTable() {
     const stClass   = {valid:'s-valid', expired:'s-expired', banned:'s-banned'}[effStatus] || 's-deleted';
     const stLabel   = {valid:'✅ Hợp lệ', expired:'⏰ Hết hạn', banned:'🚫 Bị ban'}[effStatus] || '—';
 
-    const devCount  = (k.devices || []).length;
-    const maxDev    = k.maxDevices || 1;
-    const devColor  = devCount >= maxDev ? 'var(--red)' : 'var(--accent)';
+    const devCount   = k.usedDevices || (k.devices || []).length;
+    const maxDev     = k.maxDevices || 1;
+    const onlineCnt  = k.onlineDevices || 0;
+    const devColor   = devCount >= maxDev ? 'var(--red)' : 'var(--accent)';
+    const unreadAll  = (k.devices||[]).reduce((s,d)=>s+(d.unreadCount||0),0);
 
     // Escape key for onclick
     const keyEsc = k.key.replace(/'/g, "\\'");
@@ -848,8 +861,10 @@ function renderTable() {
       <td><span class="${k.role==='admin'?'role-admin':'role-member'}">${k.role==='admin'?'👑 Admin':'👤 Member'}</span></td>
       <td><span class="badge-status ${stClass}">${stLabel}</span></td>
       <td>
-        <span class="dev-badge" onclick="openDevices('${keyEsc}')" title="Xem thiết bị">
+        <span class="dev-badge" onclick="openDevices('${keyEsc}')" title="Xem thiết bị" style="position:relative;cursor:pointer">
           📱 <span class="count" style="color:${devColor}">${devCount}</span>/${maxDev}
+          ${onlineCnt > 0 ? `<span style="color:#22c55e;font-size:11px;font-weight:700"> 🟢${onlineCnt}</span>` : ''}
+          ${unreadAll > 0 ? `<span style="background:#f97316;color:#fff;border-radius:8px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:4px">💬${unreadAll}</span>` : ''}
         </span>
       </td>
       <td style="color:${days>0&&effStatus==='valid'?'var(--green)':'var(--red)'};">${daysStr}</td>
@@ -881,47 +896,80 @@ function copyText(text) {
 function openDevices(key) {
   const k = keys.find(k => k.key === key);
   if (!k) return;
+  // Store current key for filtering
+  window._devicesCurrentKey = key;
   document.getElementById('devices-key-info').textContent = `Key: ${key}`;
-  const list = document.getElementById('devices-list');
-  const devices = k.devices || [];
-  if (!devices.length) {
-    list.innerHTML = `<div class="device-empty">📱 Chưa có thiết bị nào đăng nhập</div>`;
-  } else {
-    list.innerHTML = devices.map((d, i) => {
-      const nameEsc = (d.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      const idEsc   = d.id.replace(/'/g, "\\'");
-      const keyEsc  = key.replace(/'/g, "\\'");
-      return `
-      <div class="device-item">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Thiết bị #${i+1}</div>
-            <div class="did" style="margin-bottom:6px">ID: ${d.id}</div>
-            <!-- Tên thiết bị + đổi tên inline -->
-            <div style="display:flex;gap:6px;align-items:center">
-              <input id="dname-${i}" type="text" value="${nameEsc}" placeholder="Chưa đặt tên..."
-                style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
-                       padding:5px 9px;border-radius:6px;font-size:12px;outline:none;min-width:0">
-              <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap"
-                onclick="saveDeviceNameInline('${keyEsc}','${idEsc}',${i})">💾 Lưu tên</button>
-            </div>
-          </div>
-          <span style="font-size:10px;color:var(--text2);background:var(--surface);padding:2px 6px;border-radius:4px;border:1px solid var(--border);margin-left:8px;flex-shrink:0">
-            ${i === 0 ? '🟢 Đầu tiên' : '📱'}
-          </span>
-        </div>
-        <div class="dfirst" style="margin-top:8px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
-        <div class="dlast">🕐 Lần cuối: ${new Date(d.lastSeen).toLocaleString('vi-VN')}</div>
-        <div style="margin-top:8px">
-          <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px"
-            onclick="openKeylogModal('${idEsc}','${nameEsc||idEsc}')">
-            ⌨️ Xem log bàn phím
-          </button>
-        </div>
-      </div>`;
-    }).join('');
-  }
+  renderDevicesList(key, '');
   document.getElementById('devices-modal').style.display = 'flex';
+}
+
+function renderDevicesList(key, filterQ) {
+  const k = keys.find(k => k.key === key);
+  if (!k) return;
+  const list = document.getElementById('devices-list');
+  const devices = (k.devices || []).filter(d => {
+    if (!filterQ) return true;
+    return d.id.toLowerCase().includes(filterQ) || (d.name||'').toLowerCase().includes(filterQ);
+  });
+
+  if (!devices.length) {
+    list.innerHTML = `<div class="device-empty">📱 ${filterQ ? 'Không tìm thấy thiết bị' : 'Chưa có thiết bị nào đăng nhập'}</div>`;
+    return;
+  }
+
+  const allDevices = k.devices || [];
+  list.innerHTML = devices.map((d, i) => {
+    const realIdx = allDevices.indexOf(d);
+    const nameEsc = (d.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const idEsc   = d.id.replace(/'/g, "\\'");
+    const keyEsc  = key.replace(/'/g, "\\'");
+    const isOnline = !!d.online;
+    const onlineDot = isOnline
+      ? `<span style="display:inline-block;width:8px;height:8px;background:#22c55e;border-radius:50%;margin-right:4px;vertical-align:middle" title="Đang online"></span>`
+      : `<span style="display:inline-block;width:8px;height:8px;background:#ef4444;border-radius:50%;margin-right:4px;vertical-align:middle" title="Offline"></span>`;
+    const unread = d.unreadCount || 0;
+    const unreadBadge = unread > 0
+      ? `<span style="background:#f97316;color:#fff;border-radius:8px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:6px">💬${unread}</span>`
+      : '';
+
+    return `
+    <div class="device-item" id="ditem-${realIdx}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center">
+            ${onlineDot}Thiết bị #${realIdx+1}${unreadBadge}
+          </div>
+          <div class="did" style="margin-bottom:4px;display:flex;align-items:center;gap:6px">
+            <span title="${d.id}" style="cursor:pointer" onclick="copyText('${idEsc}')">ID: ${d.id}</span>
+            <button class="btn btn-info btn-sm" style="font-size:10px;padding:2px 7px"
+              onclick="copyText('${idEsc}');this.textContent='✓ Copied';setTimeout(()=>this.textContent='⎘ Copy',1200)">⎘ Copy</button>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input id="dname-${realIdx}" type="text" value="${nameEsc}" placeholder="Chưa đặt tên..."
+              style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);
+                     padding:5px 9px;border-radius:6px;font-size:12px;outline:none;min-width:0">
+            <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap"
+              onclick="saveDeviceNameInline('${keyEsc}','${idEsc}',${realIdx})">💾 Lưu tên</button>
+          </div>
+        </div>
+        <span style="font-size:10px;color:var(--text2);background:var(--surface);padding:2px 6px;border-radius:4px;border:1px solid var(--border);margin-left:8px;flex-shrink:0">
+          ${isOnline ? '🟢 Online' : '⚫ Offline'}
+        </span>
+      </div>
+      <div class="dfirst" style="margin-top:8px">🕐 Lần đầu: ${new Date(d.firstSeen).toLocaleString('vi-VN')}</div>
+      <div class="dlast">🕐 Lần cuối: ${new Date(d.lastSeen).toLocaleString('vi-VN')}</div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-info btn-sm" style="font-size:11px;padding:4px 10px"
+          onclick="openKeylogModal('${idEsc}','${nameEsc||idEsc}')">
+          ⌨️ Log bàn phím
+        </button>
+        <button class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#7c3aed"
+          onclick="openChatAdmin('${idEsc}','${keyEsc}')">
+          💬 Chat${unread > 0 ? ` (${unread})` : ''}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 async function saveDeviceNameInline(key, deviceId, idx) {
