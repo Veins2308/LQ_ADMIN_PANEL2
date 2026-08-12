@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod13</title>
+<title>🔐 Key Manager - LQ Mod14</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1968,6 +1968,9 @@ let chatConversations = [];
 let chatHideStatus    = false;
 let chatPollInterval  = null;
 let chatRealtimeBusy   = false;
+let chatRealtimeStop   = false;
+let chatRealtimeDevice = null;
+let chatRealtimeRevision = '';
 let chatCurrentMessages = [];
 let chatHistoryMatches = [];
 let chatHistoryIndex = -1;
@@ -1989,6 +1992,7 @@ function openChatPanel() {
 
 function closeChatPanel() {
   document.getElementById('chat-panel').classList.remove('open');
+  stopChatRealtime();
   hideCtxMenu();
 }
 
@@ -2011,56 +2015,110 @@ function formatMsgTime(ts) {
 
 // ── Poll unread count for navbar badge ────────────────────────────────────
 function startChatUnreadPoll() {
+  // Sidebar vẫn đồng bộ định kỳ để cập nhật số tin chưa đọc.
+  // Conversation đang mở dùng LONG-POLL, không còn polling 500ms.
   if (chatPollInterval) clearInterval(chatPollInterval);
   if (window._chatSidebarPollTimer) clearInterval(window._chatSidebarPollTimer);
 
-  // Messenger-style realtime sync:
-  // - active conversation: poll messages very frequently
-  // - sidebar/unread: poll a little slower
-  // - every GET gets a cache-buster so the browser/CDN cannot serve an old response
-  let activeBusy = false;
-  let sidebarBusy = false;
-
-  const syncActiveChat = async () => {
-    if (!chatCurrentDevice || activeBusy) return;
-    const panel = document.getElementById('chat-panel');
-    if (!panel || !panel.classList.contains('open')) return;
-    activeBusy = true;
-    try {
-      await loadConversationMessages(chatCurrentDevice, true);
-    } catch (_) {
-      // Keep realtime loop alive on transient network errors.
-    } finally {
-      activeBusy = false;
-    }
-  };
+  chatRealtimeStop = false;
 
   const syncSidebar = async () => {
-    if (sidebarBusy) return;
-    sidebarBusy = true;
     try {
       const data = await apiGet('/api/admin/chat/unread?_t=' + Date.now());
       const convs = data.conversations || [];
-      const total = convs.reduce((sum, c) => sum + (c.unread || 0), 0);
+      chatConversations = convs.map(c => ({
+        ...c,
+        deviceName: _getDeviceName(c.deviceID, c.key)
+      }));
+      const total = chatConversations.reduce((sum, c) => sum + (c.unread || 0), 0);
       _updateNavBadge(total);
+
       const panel = document.getElementById('chat-panel');
       if (panel && panel.classList.contains('open')) {
-        await refreshChatConversations(true);
+        filterChatConversations(_chatSearchQuery);
       }
-    } catch (_) {
-      // Silent: next cycle retries automatically.
-    } finally {
-      sidebarBusy = false;
-    }
+    } catch (_) {}
   };
 
-  // First sync immediately, then keep the connection-like polling loops alive.
-  syncActiveChat();
   syncSidebar();
+  window._chatSidebarPollTimer = setInterval(syncSidebar, 2000);
 
-  // Active chat feels effectively realtime without requiring F5.
-  chatPollInterval = setInterval(syncActiveChat, 500);
-  window._chatSidebarPollTimer = setInterval(syncSidebar, 1500);
+  // Nếu đang mở một conversation thì bắt đầu long-poll ngay.
+  if (chatCurrentDevice) startChatRealtime(chatCurrentDevice, true);
+}
+
+function stopChatRealtime() {
+  chatRealtimeStop = true;
+  chatRealtimeDevice = null;
+  chatRealtimeRevision = '';
+}
+
+async function startChatRealtime(deviceID, immediate = false) {
+  if (!deviceID) return;
+
+  chatRealtimeStop = false;
+  chatRealtimeDevice = deviceID;
+
+  // Không tạo nhiều long-poll song song cho cùng device.
+  if (chatRealtimeBusy && chatRealtimeDevice === deviceID) return;
+
+  chatRealtimeBusy = true;
+
+  try {
+    if (immediate) {
+      await loadConversationMessages(deviceID, false);
+    }
+
+    // Lấy revision hiện tại trước khi chờ.
+    try {
+      const initial = await apiGet(
+        `/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}&_t=${Date.now()}`
+      );
+      if (deviceID !== chatCurrentDevice) return;
+      chatRealtimeRevision = initial.revision || '';
+      chatCurrentMessages = initial.messages || [];
+      renderMessages(chatCurrentMessages, true);
+    } catch (_) {}
+
+    while (!chatRealtimeStop && chatRealtimeDevice === deviceID && chatCurrentDevice === deviceID) {
+      try {
+        const path = `/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}&wait=1&revision=${encodeURIComponent(chatRealtimeRevision)}&_t=${Date.now()}`;
+        const data = await apiGet(path);
+
+        if (chatRealtimeStop || chatRealtimeDevice !== deviceID || chatCurrentDevice !== deviceID) break;
+
+        if (data.revision) chatRealtimeRevision = data.revision;
+
+        const nextMessages = data.messages || [];
+        const previousMessages = chatCurrentMessages || [];
+        const changed = JSON.stringify(nextMessages) !== JSON.stringify(previousMessages);
+
+        if (changed) {
+          const area = document.getElementById('chat-messages-area');
+          const nearBottom = area
+            ? (area.scrollHeight - area.scrollTop - area.clientHeight < 120)
+            : true;
+
+          chatCurrentMessages = nextMessages;
+          renderMessages(nextMessages, nearBottom);
+
+          // Cập nhật sidebar/unread ngay sau khi nhận tin mới.
+          refreshChatConversations(true);
+        }
+      } catch (_) {
+        if (chatRealtimeStop || chatRealtimeDevice !== deviceID) break;
+        // Không spam request khi mạng tạm lỗi.
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    }
+  } finally {
+    chatRealtimeBusy = false;
+
+    // Nếu conversation vẫn đang mở, tự nối lại sau khi long-poll kết thúc.
+    if (!chatRealtimeStop && chatCurrentDevice === deviceID && chatRealtimeDevice === deviceID) {
+      setTimeout(() => startChatRealtime(deviceID, false), 50);
+    }
+  }
 }
 
 
@@ -2156,7 +2214,11 @@ async function openConversation(deviceID, key) {
   const historyResults = document.getElementById('chat-history-results');
   if (historyResults) historyResults.classList.remove('open');
   renderConversationList(); // refresh active highlight
+  stopChatRealtime();
+  chatRealtimeDevice = deviceID;
+  chatRealtimeRevision = '';
   await loadConversationMessages(deviceID);
+  startChatRealtime(deviceID, false);
 }
 
 async function loadConversationMessages(deviceID, silent = false) {
