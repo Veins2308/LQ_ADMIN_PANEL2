@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod19</title>
+<title>🔐 Key Manager - LQ Mod20</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -2177,6 +2177,15 @@ function stopChatRealtime() {
 async function startChatRealtime(deviceID, immediate = false) {
   if (!deviceID) return;
 
+  // Nếu đang busy với device khác, dừng và chờ một chút
+  if (chatRealtimeBusy && chatRealtimeDevice !== deviceID) {
+    chatRealtimeStop = true;
+    await new Promise(r => setTimeout(r, 80));
+  }
+
+  // Kiểm tra lại sau khi chờ — nếu device hiện tại đã thay đổi thì bỏ qua
+  if (chatCurrentDevice !== deviceID) return;
+
   chatRealtimeStop = false;
   chatRealtimeDevice = deviceID;
 
@@ -2319,8 +2328,17 @@ function renderConversationList() {
 
 // ── Open a specific conversation ───────────────────────────────────────────
 async function openConversation(deviceID, key) {
+  // Dừng realtime của device cũ TRƯỚC khi đổi chatCurrentDevice
+  stopChatRealtime();
+
   chatCurrentDevice = deviceID;
   chatCurrentKey    = key;
+  chatCurrentMessages = [];
+  chatRealtimeRevision = '';
+
+  // Hiện loading ngay lập tức để user thấy đang chuyển chat
+  const area = document.getElementById('chat-messages-area');
+  if (area) area.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px;font-size:13px">Đang tải...</div>';
 
   // Find device name
   const devName = _getDeviceName(deviceID, key);
@@ -2337,12 +2355,16 @@ async function openConversation(deviceID, key) {
   chatHistoryIndex = -1;
   const historyResults = document.getElementById('chat-history-results');
   if (historyResults) historyResults.classList.remove('open');
+
   renderConversationList(); // refresh active highlight
-  stopChatRealtime();
-  chatRealtimeDevice = deviceID;
-  chatRealtimeRevision = '';
-  await loadConversationMessages(deviceID);
-  startChatRealtime(deviceID, false);
+
+  // Load messages trực tiếp (không qua startChatRealtime để tránh race condition)
+  await loadConversationMessages(deviceID, false);
+
+  // Sau khi load xong mới bắt đầu realtime, kiểm tra device vẫn là device hiện tại
+  if (chatCurrentDevice === deviceID) {
+    startChatRealtime(deviceID, false);
+  }
 }
 
 async function loadConversationMessages(deviceID, silent = false) {
@@ -2516,8 +2538,11 @@ async function refreshCurrentChatNow() {
     chatRealtimeDevice = deviceID;
     chatRealtimeRevision = '';
 
-    await loadConversationMessages(deviceID, false);
-    await refreshChatConversations(true);
+    // Load messages và conversations song song để nhanh hơn
+    await Promise.all([
+      loadConversationMessages(deviceID, false),
+      refreshChatConversations(false)  // false = không silent, cập nhật lại sidebar
+    ]);
 
     // Mở lại realtime ngay sau khi tải thủ công.
     if (chatCurrentDevice === deviceID) {
