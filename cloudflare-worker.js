@@ -60,6 +60,22 @@ function sanitizeChatProfile(profile, fallbackName, fallbackAvatar) {
   };
 }
 
+// KV list() mặc định không trả toàn bộ key nếu namespace có nhiều hơn một trang.
+// Chat phải quét hết các trang để không làm mất thiết bị khỏi danh sách hội thoại.
+async function listAllKVKeys(env, prefix) {
+  const all = [];
+  let cursor = undefined;
+  do {
+    const options = { prefix, limit: 1000 };
+    if (cursor) options.cursor = cursor;
+    const page = await env.KEYS_KV.list(options);
+    if (Array.isArray(page.keys)) all.push(...page.keys);
+    if (page.list_complete || !page.cursor) break;
+    cursor = page.cursor;
+  } while (cursor);
+  return all;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -2798,7 +2814,7 @@ export default {
         new Date();
 
       for (
-        const item of listed.keys
+        const item of listedKeys
       ) {
         const raw =
           await env.KEYS_KV.get(
@@ -2949,15 +2965,12 @@ export default {
         );
       }
 
-      const listed =
-        await env.KEYS_KV.list({
-          prefix: 'chat:'
-        });
+      const listedKeys = await listAllKVKeys(env, 'chat:');
 
       const result = [];
 
       for (
-        const item of listed.keys
+        const item of listedKeys
       ) {
         if (
           item.name ===
@@ -3110,8 +3123,8 @@ export default {
 
       // Touch conversations so open long-polls immediately re-render
       // the read-status state for already-read messages.
-      const listed = await env.KEYS_KV.list({ prefix: 'chat:' });
-      for (const item of listed.keys) {
+      const listedKeys = await listAllKVKeys(env, 'chat:');
+      for (const item of listedKeys) {
         if (
           item.name === 'chat:admin:hidestatus' ||
           item.name === 'chat:admin:profile'
@@ -3218,10 +3231,7 @@ export default {
         );
       }
 
-      const listed =
-        await env.KEYS_KV.list({
-          prefix: 'chat:'
-        });
+      const listedKeys = await listAllKVKeys(env, 'chat:');
 
       const result = [];
 
@@ -3596,8 +3606,8 @@ export default {
 
       // Touch every existing conversation so user clients notice the
       // profile change immediately on their next poll.
-      const listed = await env.KEYS_KV.list({ prefix: 'chat:' });
-      for (const item of listed.keys) {
+      const listedKeys = await listAllKVKeys(env, 'chat:');
+      for (const item of listedKeys) {
         if (
           item.name === 'chat:admin:profile' ||
           item.name === 'chat:admin:hidestatus'
