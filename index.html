@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod22</title>
+<title>🔐 Key Manager - LQ Mod23</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1161,7 +1161,7 @@ function renderDevicesList(key, filterQ) {
           ⌨️ Log bàn phím
         </button>
         <button class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#059669;color:#fff;position:relative"
-          onclick="closeModal('devices-modal');openChatPanel('${idEsc}')">
+          onclick="closeModal('devices-modal');openChatPanel();openConversation('${idEsc}','${keyEsc}')">
           💬 Chat${unreadBadgeHtml}
         </button>
       </div>
@@ -2104,20 +2104,13 @@ function applyChatProfiles(data) {
   }
 }
 
-async function openChatPanel(preferredDeviceID = '') {
+function openChatPanel() {
   document.getElementById('chat-panel').classList.add('open');
-  await Promise.all([refreshChatConversations(), fetchHideStatus(), loadAdminProfile()]);
-
-  // Nếu cửa sổ chat mở từ phần thiết bị, chuyển ngay sang đúng thiết bị.
-  const target = preferredDeviceID
-    ? chatConversations.find(c => String(c.deviceID) === String(preferredDeviceID))
-    : (chatCurrentDevice
-        ? chatConversations.find(c => String(c.deviceID) === String(chatCurrentDevice))
-        : chatConversations[0]);
-
-  if (target) {
-    await openConversation(target.deviceID, target.key);
-  }
+  // Hiển thị ngay lập tức từ dữ liệu đã có (keys + chatConversations)
+  renderConversationList();
+  refreshChatConversations();
+  fetchHideStatus();
+  loadAdminProfile();
 }
 
 function closeChatPanel() {
@@ -2268,26 +2261,12 @@ function _updateNavBadge(total) {
 async function refreshChatConversations(silent = false) {
   try {
     const data = await apiGet('/api/admin/chat/allconversations?_t=' + Date.now());
-    const incoming = Array.isArray(data.conversations) ? data.conversations : [];
-
-    // Mỗi conversation gắn với đúng deviceID. Không ghi đè chatUserProfile
-    // bằng conversation cuối cùng vì sẽ làm avatar/tên của thiết bị đang mở bị sai.
-    chatConversations = incoming.map(c => ({
-      ...c,
-      deviceName: _getDeviceName(c.deviceID, c.key)
-    }));
-
-    const current = chatConversations.find(c => String(c.deviceID) === String(chatCurrentDevice));
-    if (current && current.userProfile) {
-      chatUserProfile = {
-        name: String(current.userProfile.name || 'USER'),
-        avatar: String(current.userProfile.avatar || '')
-      };
-      if (chatCurrentDevice && Array.isArray(chatCurrentMessages) && chatCurrentMessages.length) {
-        renderMessages(chatCurrentMessages, true);
-      }
-    }
-
+    // Enrich with device name from keys state
+    chatConversations = (data.conversations || []).map(c => {
+      const devName = _getDeviceName(c.deviceID, c.key);
+      if (c.userProfile) chatUserProfile = c.userProfile;
+      return { ...c, deviceName: devName };
+    });
     filterChatConversations(_chatSearchQuery);
     const total = chatConversations.reduce((s, c) => s + (c.unread || 0), 0);
     _updateNavBadge(total);
@@ -2311,7 +2290,43 @@ function filterChatConversations(q) {
 
 function renderConversationList() {
   const el = document.getElementById('conv-list');
-  let list = chatConversations;
+
+  // Merge chatConversations (có data từ server) với TẤT CẢ thiết bị trong keys
+  // để sidebar luôn hiển thị đầy đủ thiết bị ngay cả khi chưa có chat record
+  const convMap = new Map();
+  for (const c of chatConversations) {
+    if (c.deviceID) convMap.set(c.deviceID, c);
+  }
+  // Thêm thiết bị từ keys chưa có trong chatConversations
+  for (const k of (keys || [])) {
+    for (const d of (k.devices || [])) {
+      if (!convMap.has(d.id)) {
+        convMap.set(d.id, {
+          deviceID: d.id,
+          key: k.key,
+          deviceName: d.name || '',
+          unread: 0,
+          lastMessage: null
+        });
+      } else {
+        // Cập nhật deviceName từ keys nếu chưa có
+        const existing = convMap.get(d.id);
+        if (!existing.deviceName && d.name) existing.deviceName = d.name;
+        if (!existing.key) existing.key = k.key;
+      }
+    }
+  }
+
+  let list = Array.from(convMap.values());
+
+  // Sắp xếp: unread trước, rồi theo thời gian tin nhắn cuối
+  list.sort((a, b) => {
+    if ((b.unread||0) !== (a.unread||0)) return (b.unread||0) - (a.unread||0);
+    const ta = a.lastMessage?.ts || '';
+    const tb = b.lastMessage?.ts || '';
+    return tb.localeCompare(ta);
+  });
+
   if (_chatSearchQuery) {
     list = list.filter(c =>
       (c.deviceName||'').toLowerCase().includes(_chatSearchQuery) ||
@@ -2322,7 +2337,7 @@ function renderConversationList() {
   }
   if (!list.length) {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2);font-size:12px">' +
-      (_chatSearchQuery ? 'Không tìm thấy kết quả' : 'Chưa có hội thoại nào') + '</div>';
+      (_chatSearchQuery ? 'Không tìm thấy kết quả' : 'Chưa có thiết bị nào') + '</div>';
     return;
   }
   el.innerHTML = list.map((c) => {
@@ -2338,6 +2353,10 @@ function renderConversationList() {
       <div class="conv-last">${lastFrom}${escapeHtml(lastText)}</div>
     </div>`;
   }).join('');
+
+  // Scroll đến thiết bị đang active
+  const activeEl = el.querySelector('.conv-item.active');
+  if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ── Open a specific conversation ───────────────────────────────────────────
@@ -2771,7 +2790,8 @@ window.renderTable = function() {
     chatBtn.onclick = () => {
       const firstDevice = (k.devices||[])[0];
       if (!firstDevice) return;
-      void openChatPanel(firstDevice.id);
+      openChatPanel();
+      openConversation(firstDevice.id, k.key);
     };
     actionsCell.appendChild(chatBtn);
   });
