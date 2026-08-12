@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod14</title>
+<title>🔐 Key Manager - LQ Mod16</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -759,6 +759,7 @@
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:center">
+              <button class="btn btn-ghost btn-sm" onclick="refreshCurrentChatNow()" title="Làm mới đoạn chat">🔄 Làm mới</button>
               <button class="btn btn-info btn-sm" onclick="openSendToKeyModal()">📤 Gửi key này</button>
               <button class="btn btn-danger btn-sm" onclick="clearCurrentChat()" title="Xóa toàn bộ chat">🗑 Xóa chat</button>
             </div>
@@ -848,13 +849,17 @@ async function apiPost(path, body) {
   const r = await fetch(WORKER_URL + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Admin-Token': ADMIN_TOKEN },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    cache: 'no-store'
   });
+
+  const data = await r.json().catch(() => ({}));
+
   if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${r.status}`);
+    throw new Error(data.error || `HTTP ${r.status}`);
   }
-  return r.json();
+
+  return data;
 }
 
 // ════════════════════════════════════════════════════════
@@ -2266,8 +2271,8 @@ function renderMessages(msgs, keepBottom = true) {
     const ts   = formatMsgTime(m.ts || '');
     const msgId = String(m.id || '');
     const devID = String(chatCurrentDevice || '');
-    const msgIdSafe = msgId.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const devIDSafe = devID.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const msgIdSafe = msgId.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const devIDSafe = devID.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
     if (from === 'system') {
       return `<div class="chat-msg system">
@@ -2316,25 +2321,97 @@ function hideCtxMenu() {
 document.addEventListener('click', () => hideCtxMenu());
 
 async function deleteCurrentMsg() {
-  if (!_ctxMsgId || !_ctxDeviceID) return;
+  // Snapshot ngay lập tức vì click trên context menu có thể làm
+  // document click handler reset _ctxMsgId/_ctxDeviceID.
+  const deviceID = String(_ctxDeviceID || '').trim();
+  const msgId = String(_ctxMsgId || '').trim();
+
+  if (!deviceID || !msgId) {
+    hideCtxMenu();
+    showToast('❌ Không xác định được thiết bị hoặc tin nhắn', 'err');
+    return;
+  }
+
   hideCtxMenu();
+
+  // Xóa ngay trên UI để cảm giác realtime, sau đó đồng bộ server.
+  const oldMessages = Array.isArray(chatCurrentMessages)
+    ? chatCurrentMessages.slice()
+    : [];
+
+  chatCurrentMessages = oldMessages.filter(m => String(m.id || '') !== msgId);
+  renderMessages(chatCurrentMessages, true);
+
   try {
-    await apiPost('/api/admin/chat/deletemsg', { deviceID: _ctxDeviceID, msgId: _ctxMsgId });
-    await loadConversationMessages(_ctxDeviceID);
+    await apiPost('/api/admin/chat/deletemsg', {
+      deviceID: deviceID,
+      msgId: msgId
+    });
+
+    // Server là nguồn dữ liệu cuối cùng.
+    await loadConversationMessages(deviceID, false);
+    await refreshChatConversations(true);
+
     showToast('🗑 Đã xóa tin nhắn', 'ok');
   } catch(e) {
+    // Nếu server lỗi thì khôi phục UI.
+    chatCurrentMessages = oldMessages;
+    renderMessages(oldMessages, true);
+    showToast('❌ ' + e.message, 'err');
+  }
+}
+
+// ── Manual refresh current chat ─────────────────────────────────────────────
+async function refreshCurrentChatNow() {
+  const deviceID = String(chatCurrentDevice || '').trim();
+  if (!deviceID) return;
+
+  try {
+    // Dừng long-poll hiện tại để tránh 2 request cùng conversation.
+    stopChatRealtime();
+
+    chatRealtimeDevice = deviceID;
+    chatRealtimeRevision = '';
+
+    await loadConversationMessages(deviceID, false);
+    await refreshChatConversations(true);
+
+    // Mở lại realtime ngay sau khi tải thủ công.
+    if (chatCurrentDevice === deviceID) {
+      startChatRealtime(deviceID, false);
+    }
+
+    showToast('🔄 Đã làm mới đoạn chat', 'ok');
+  } catch (e) {
     showToast('❌ ' + e.message, 'err');
   }
 }
 
 // ── Clear entire chat ──────────────────────────────────────────────────────
 async function clearCurrentChat() {
-  if (!chatCurrentDevice) return;
+  const deviceID = String(chatCurrentDevice || '').trim();
+  if (!deviceID) return;
   if (!confirm('Xóa toàn bộ lịch sử chat với thiết bị này?')) return;
+
   try {
-    await apiPost('/api/admin/chat/clear', { deviceID: chatCurrentDevice });
-    await loadConversationMessages(chatCurrentDevice);
-    await refreshChatConversations();
+    await apiPost('/api/admin/chat/clear', { deviceID });
+
+    // Xóa ngay trên giao diện.
+    chatCurrentMessages = [];
+    chatRealtimeRevision = '';
+    renderMessages([], true);
+
+    // Tải lại conversation + mở lại long-poll.
+    await refreshChatConversations(true);
+
+    if (chatCurrentDevice === deviceID) {
+      await loadConversationMessages(deviceID, false);
+      stopChatRealtime();
+      chatRealtimeDevice = deviceID;
+      chatRealtimeRevision = '';
+      startChatRealtime(deviceID, false);
+    }
+
     showToast('🗑 Đã xóa toàn bộ chat', 'ok');
   } catch(e) {
     showToast('❌ ' + e.message, 'err');
