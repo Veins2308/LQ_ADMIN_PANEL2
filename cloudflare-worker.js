@@ -521,18 +521,31 @@ export default {
         await env.KEYS_KV.put(chatKey, JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 90 });
       }
 
-      // Filter messages after timestamp
-      let msgs = record.messages || [];
-      if (after) msgs = msgs.filter(m => m.ts > after);
+      // Return new messages plus status updates for older user messages.
+      // The client may already have the message locally, so it must be able to
+      // receive a later read/seen-state change even when its timestamp is old.
+      const allStoredMsgs = record.messages || [];
+      const newMsgs = after ? allStoredMsgs.filter(m => m.ts > after) : allStoredMsgs;
+      const statusUpdates = allStoredMsgs.filter(m =>
+        m.from === 'user' && m.readByAdmin === true
+      );
 
-      // For user messages: adminSeen = readByAdmin && the hideAdminStatus snapshot at read-time was false
-      // hideAdminStatus is snapshotted per-message when admin reads it, so this is correct.
-      const processedMsgs = msgs.map(m => ({
+      const byId = new Map();
+      [...newMsgs, ...statusUpdates].forEach(m => {
+        if (m && m.id) byId.set(m.id, m);
+      });
+
+      // For user messages, adminSeen is permanently determined by the hide-status
+      // snapshot taken when admin first read that message. Turning hide-status on
+      // later does NOT rewrite earlier messages.
+      const processedMsgs = Array.from(byId.values()).map(m => ({
         ...m,
-        adminSeen: m.from === 'user' ? (m.readByAdmin === true && !m.hideAdminStatus) : undefined,
+        adminSeen: m.from === 'user'
+          ? (m.readByAdmin === true && m.hideAdminStatus !== true)
+          : undefined,
       }));
 
-      return json({ messages: processedMsgs, unread }, corsHeaders);
+      return json({ messages: processedMsgs, statusUpdates: [], unread }, corsHeaders);
     }
 
     // ── GET /api/admin/chat/messages — Admin xem tin nhắn của device ───────
@@ -830,6 +843,11 @@ export default {
 function json(data, headers = {}, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...headers }
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      ...headers
+    }
   });
 }
