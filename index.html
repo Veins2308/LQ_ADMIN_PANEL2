@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod11</title>
+<title>🔐 Key Manager - LQ Mod12</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -71,6 +71,17 @@
   .chat-conv-header { padding:10px 16px; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--surface); }
   .chat-conv-name { font-size:14px; font-weight:700; color:var(--text); }
   .chat-conv-sub { font-size:10px; color:var(--text2); font-family:monospace; word-break:break-all; margin-top:2px; }
+  .chat-history-tools { display:flex; gap:5px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .chat-history-tools input { flex:1; min-width:180px; background:transparent; border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:7px; font-size:12px; outline:none; }
+  .chat-history-tools input:focus { border-color:var(--accent); }
+  .chat-history-tools .history-count { font-size:10px; color:var(--text2); min-width:44px; text-align:center; }
+  .chat-history-results { display:none; position:absolute; right:16px; top:86px; width:min(420px,calc(100% - 32px)); max-height:280px; overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:9px; box-shadow:0 12px 35px rgba(0,0,0,.45); z-index:20; }
+  .chat-history-results.open { display:block; }
+  .chat-history-result { padding:9px 11px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .chat-history-result:hover { background:rgba(59,130,246,.10); }
+  .chat-history-result:last-child { border-bottom:none; }
+  .chat-history-result .r-meta { font-size:9px; color:var(--text2); margin-bottom:3px; }
+  .chat-history-result .r-text { font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* Context menu for message delete */
   .msg-ctx-menu { position:fixed; background:var(--surface); border:1px solid var(--border); border-radius:8px;
     padding:4px 0; z-index:9999; box-shadow:0 8px 24px rgba(0,0,0,0.4); min-width:140px; }
@@ -739,6 +750,13 @@
               <div class="chat-conv-name" id="chat-current-name">—</div>
               <div class="chat-conv-sub" id="chat-current-device"></div>
               <div class="chat-conv-sub" id="chat-current-key"></div>
+              <div class="chat-history-tools">
+                <input type="text" id="chat-history-search" placeholder="🔍 Tìm trong lịch sử tin nhắn..." oninput="updateChatHistorySearch(this.value)" autocomplete="off">
+                <button class="btn btn-ghost btn-sm" onclick="historySearchMove(-1)" title="Kết quả trước">▲</button>
+                <span class="history-count" id="chat-history-count">0/0</span>
+                <button class="btn btn-ghost btn-sm" onclick="historySearchMove(1)" title="Kết quả tiếp">▼</button>
+                <button class="btn btn-ghost btn-sm" onclick="toggleChatHistoryList()" title="Xem danh sách kết quả">☷</button>
+              </div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;align-items:center">
               <button class="btn btn-info btn-sm" onclick="openSendToKeyModal()">📤 Gửi key này</button>
@@ -746,12 +764,13 @@
             </div>
           </div>
         </div>
+        <div id="chat-history-results" class="chat-history-results"></div>
         <div class="chat-messages" id="chat-messages-area">
           <div style="text-align:center;color:var(--text2);padding:40px 0;font-size:13px">💬 Chọn hội thoại để xem tin nhắn</div>
         </div>
         <div class="chat-input-area" id="chat-input-area" style="display:none">
           <input type="text" id="chat-reply-input" placeholder="Nhập tin nhắn trả lời..."
-                 onkeydown="if(event.key==='Enter')sendAdminReply()">
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();sendAdminReply()}">
           <button class="btn btn-primary" onclick="sendAdminReply()" style="white-space:nowrap">Gửi ↵</button>
         </div>
       </div>
@@ -1948,6 +1967,10 @@ let chatCurrentKey    = null;
 let chatConversations = [];
 let chatHideStatus    = false;
 let chatPollInterval  = null;
+let chatRealtimeBusy   = false;
+let chatCurrentMessages = [];
+let chatHistoryMatches = [];
+let chatHistoryIndex = -1;
 
 // ── Open/close chat panel ─────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════
@@ -1997,10 +2020,17 @@ function startChatUnreadPoll() {
       _updateNavBadge(total);
       // If panel open, silently refresh sidebar
       if (document.getElementById('chat-panel').classList.contains('open')) {
-        await refreshChatConversations();
+        if (chatRealtimeBusy) return;
+        chatRealtimeBusy = true;
+        try {
+          await refreshChatConversations();
+          if (chatCurrentDevice) await loadConversationMessages(chatCurrentDevice);
+        } finally {
+          chatRealtimeBusy = false;
+        }
       }
     } catch {}
-  }, 8000);
+  }, 1000);
 }
 
 function _updateNavBadge(total) {
@@ -2088,19 +2118,29 @@ async function openConversation(deviceID, key) {
   document.getElementById('chat-input-area').style.display = 'flex';
   document.getElementById('chat-reply-input').focus();
 
+  const historyInput = document.getElementById('chat-history-search');
+  if (historyInput) historyInput.value = '';
+  chatHistoryMatches = [];
+  chatHistoryIndex = -1;
+  const historyResults = document.getElementById('chat-history-results');
+  if (historyResults) historyResults.classList.remove('open');
   renderConversationList(); // refresh active highlight
   await loadConversationMessages(deviceID);
 }
 
 async function loadConversationMessages(deviceID) {
+  if (!deviceID) return;
   const area = document.getElementById('chat-messages-area');
   try {
     const data = await apiGet(`/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}`);
-    renderMessages(data.messages || []);
-    // Silently refresh sidebar unread counts
-    refreshChatConversations();
+    if (deviceID !== chatCurrentDevice) return;
+    chatCurrentMessages = data.messages || [];
+    renderMessages(chatCurrentMessages);
+    // Keep the current history query active after a real-time refresh.
+    const q = document.getElementById('chat-history-search');
+    if (q && q.value.trim()) updateChatHistorySearch(q.value);
   } catch(e) {
-    area.innerHTML = `<div style="color:var(--red);padding:20px">Lỗi: ${e.message}</div>`;
+    if (deviceID === chatCurrentDevice) area.innerHTML = `<div style="color:var(--red);padding:20px">Lỗi: ${e.message}</div>`;
   }
 }
 
@@ -2111,7 +2151,8 @@ function renderMessages(msgs) {
     return;
   }
 
-  area.innerHTML = msgs.map(m => {
+  chatCurrentMessages = msgs || [];
+  area.innerHTML = msgs.map((m, messageIndex) => {
     const from = m.from || 'user';
     const text = escapeHtml(m.text || '');
     const ts   = formatMsgTime(m.ts || '');
@@ -2136,7 +2177,7 @@ function renderMessages(msgs) {
         : `<span class="unseen">✓ Chưa đọc</span>`;
     }
 
-    return `<div class="chat-msg ${from}" data-msg-id="${msgIdSafe}"
+    return `<div class="chat-msg ${from}" data-msg-id="${msgIdSafe}" data-msg-index="${messageIndex}"
       oncontextmenu="showMsgCtxMenu(event,'${msgIdSafe}','${devIDSafe}');return false;"
       onmousedown="if(event.button===2)showMsgCtxMenu(event,'${msgIdSafe}','${devIDSafe}')">
       <div class="chat-bubble">${text}</div>
@@ -2192,12 +2233,91 @@ async function clearCurrentChat() {
   }
 }
 
+// ── Search current conversation history ───────────────────────────────────
+function _historyEscapeText(text) {
+  return escapeHtml(String(text || ''));
+}
+
+function updateChatHistorySearch(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const countEl = document.getElementById('chat-history-count');
+  const resultsEl = document.getElementById('chat-history-results');
+  if (!q) {
+    chatHistoryMatches = [];
+    chatHistoryIndex = -1;
+    if (countEl) countEl.textContent = '0/0';
+    if (resultsEl) { resultsEl.innerHTML = ''; resultsEl.classList.remove('open'); }
+    return;
+  }
+
+  chatHistoryMatches = [];
+  (chatCurrentMessages || []).forEach((m, i) => {
+    const text = String(m.text || '');
+    if (text.toLowerCase().includes(q)) chatHistoryMatches.push({ index: i, text, ts: m.ts, from: m.from });
+  });
+  chatHistoryIndex = chatHistoryMatches.length ? 0 : -1;
+  if (countEl) countEl.textContent = chatHistoryMatches.length ? `1/${chatHistoryMatches.length}` : '0/0';
+  renderChatHistoryResults();
+  if (chatHistoryIndex >= 0) scrollToHistoryMatch(chatHistoryIndex);
+}
+
+function scrollToHistoryMatch(matchIndex) {
+  if (!chatHistoryMatches.length) return;
+  chatHistoryIndex = (matchIndex + chatHistoryMatches.length) % chatHistoryMatches.length;
+  const match = chatHistoryMatches[chatHistoryIndex];
+  const el = document.querySelector(`#chat-messages-area .chat-msg[data-msg-index="${match.index}"]`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.outline = '2px solid var(--accent)';
+    el.style.outlineOffset = '3px';
+    setTimeout(() => { if (el) el.style.outline = ''; }, 900);
+  }
+  const countEl = document.getElementById('chat-history-count');
+  if (countEl) countEl.textContent = `${chatHistoryIndex + 1}/${chatHistoryMatches.length}`;
+}
+
+function historySearchMove(delta) {
+  if (!chatHistoryMatches.length) {
+    const q = document.getElementById('chat-history-search');
+    if (q) updateChatHistorySearch(q.value);
+    return;
+  }
+  scrollToHistoryMatch(chatHistoryIndex + delta);
+}
+
+function renderChatHistoryResults() {
+  const el = document.getElementById('chat-history-results');
+  if (!el) return;
+  if (!chatHistoryMatches.length) {
+    el.innerHTML = '<div style="padding:14px;color:var(--text2);font-size:12px;text-align:center">Không tìm thấy tin nhắn phù hợp.</div>';
+    return;
+  }
+  el.innerHTML = chatHistoryMatches.map((m, i) => `
+    <div class="chat-history-result" onclick="scrollToHistoryMatch(${i});document.getElementById('chat-history-results').classList.remove('open')">
+      <div class="r-meta">${m.from === 'admin' ? 'ADMIN' : (m.from === 'system' ? 'SYSTEM' : 'USER')} · ${formatMsgTime(m.ts || '')}</div>
+      <div class="r-text">${_historyEscapeText(m.text)}</div>
+    </div>`).join('');
+}
+
+function toggleChatHistoryList() {
+  const el = document.getElementById('chat-history-results');
+  if (!el) return;
+  if (!chatHistoryMatches.length) {
+    const q = document.getElementById('chat-history-search');
+    if (q) updateChatHistorySearch(q.value);
+  }
+  el.classList.toggle('open');
+}
+
 // ── Send admin reply ───────────────────────────────────────────────────────
+let chatReplySending = false;
 async function sendAdminReply() {
-  if (!chatCurrentDevice) return;
+  if (!chatCurrentDevice || chatReplySending) return;
   const input = document.getElementById('chat-reply-input');
   const msg = input.value.trim();
   if (!msg) return;
+  chatReplySending = true;
+  input.disabled = true;
   input.value = '';
   input.focus();
   try {
@@ -2205,6 +2325,10 @@ async function sendAdminReply() {
     await loadConversationMessages(chatCurrentDevice);
   } catch(e) {
     showToast('❌ Gửi thất bại: ' + e.message, 'err');
+  } finally {
+    chatReplySending = false;
+    input.disabled = false;
+    input.focus();
   }
 }
 
