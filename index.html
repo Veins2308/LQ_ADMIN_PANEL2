@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod12</title>
+<title>🔐 Key Manager - LQ Mod13</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -2012,26 +2012,57 @@ function formatMsgTime(ts) {
 // ── Poll unread count for navbar badge ────────────────────────────────────
 function startChatUnreadPoll() {
   if (chatPollInterval) clearInterval(chatPollInterval);
-  chatPollInterval = setInterval(async () => {
+  if (window._chatSidebarPollTimer) clearInterval(window._chatSidebarPollTimer);
+
+  // Messenger-style realtime sync:
+  // - active conversation: poll messages very frequently
+  // - sidebar/unread: poll a little slower
+  // - every GET gets a cache-buster so the browser/CDN cannot serve an old response
+  let activeBusy = false;
+  let sidebarBusy = false;
+
+  const syncActiveChat = async () => {
+    if (!chatCurrentDevice || activeBusy) return;
+    const panel = document.getElementById('chat-panel');
+    if (!panel || !panel.classList.contains('open')) return;
+    activeBusy = true;
     try {
-      const data = await apiGet('/api/admin/chat/unread');
+      await loadConversationMessages(chatCurrentDevice, true);
+    } catch (_) {
+      // Keep realtime loop alive on transient network errors.
+    } finally {
+      activeBusy = false;
+    }
+  };
+
+  const syncSidebar = async () => {
+    if (sidebarBusy) return;
+    sidebarBusy = true;
+    try {
+      const data = await apiGet('/api/admin/chat/unread?_t=' + Date.now());
       const convs = data.conversations || [];
-      const total = convs.reduce((s, c) => s + (c.unread || 0), 0);
+      const total = convs.reduce((sum, c) => sum + (c.unread || 0), 0);
       _updateNavBadge(total);
-      // If panel open, silently refresh sidebar
-      if (document.getElementById('chat-panel').classList.contains('open')) {
-        if (chatRealtimeBusy) return;
-        chatRealtimeBusy = true;
-        try {
-          await refreshChatConversations();
-          if (chatCurrentDevice) await loadConversationMessages(chatCurrentDevice);
-        } finally {
-          chatRealtimeBusy = false;
-        }
+      const panel = document.getElementById('chat-panel');
+      if (panel && panel.classList.contains('open')) {
+        await refreshChatConversations(true);
       }
-    } catch {}
-  }, 1000);
+    } catch (_) {
+      // Silent: next cycle retries automatically.
+    } finally {
+      sidebarBusy = false;
+    }
+  };
+
+  // First sync immediately, then keep the connection-like polling loops alive.
+  syncActiveChat();
+  syncSidebar();
+
+  // Active chat feels effectively realtime without requiring F5.
+  chatPollInterval = setInterval(syncActiveChat, 500);
+  window._chatSidebarPollTimer = setInterval(syncSidebar, 1500);
 }
+
 
 function _updateNavBadge(total) {
   const badge = document.getElementById('chat-nav-badge');
@@ -2044,9 +2075,9 @@ function _updateNavBadge(total) {
 }
 
 // ── Fetch all conversations ────────────────────────────────────────────────
-async function refreshChatConversations() {
+async function refreshChatConversations(silent = false) {
   try {
-    const data = await apiGet('/api/admin/chat/allconversations');
+    const data = await apiGet('/api/admin/chat/allconversations?_t=' + Date.now());
     // Enrich with device name from keys state
     chatConversations = (data.conversations || []).map(c => {
       const devName = _getDeviceName(c.deviceID, c.key);
@@ -2128,23 +2159,38 @@ async function openConversation(deviceID, key) {
   await loadConversationMessages(deviceID);
 }
 
-async function loadConversationMessages(deviceID) {
+async function loadConversationMessages(deviceID, silent = false) {
   if (!deviceID) return;
   const area = document.getElementById('chat-messages-area');
   try {
-    const data = await apiGet(`/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}`);
+    const data = await apiGet(`/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}&_t=${Date.now()}`);
     if (deviceID !== chatCurrentDevice) return;
-    chatCurrentMessages = data.messages || [];
-    renderMessages(chatCurrentMessages);
+
+    const nextMessages = data.messages || [];
+    const previousMessages = chatCurrentMessages || [];
+    const previousLastId = previousMessages.length ? String(previousMessages[previousMessages.length - 1].id || '') : '';
+    const nextLastId = nextMessages.length ? String(nextMessages[nextMessages.length - 1].id || '') : '';
+    const changed = nextMessages.length !== previousMessages.length || previousLastId !== nextLastId ||
+      JSON.stringify(nextMessages) !== JSON.stringify(previousMessages);
+
+    chatCurrentMessages = nextMessages;
+    if (changed || !silent) {
+      const wasNearBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 100;
+      renderMessages(chatCurrentMessages, wasNearBottom);
+    }
+
     // Keep the current history query active after a real-time refresh.
     const q = document.getElementById('chat-history-search');
     if (q && q.value.trim()) updateChatHistorySearch(q.value);
   } catch(e) {
-    if (deviceID === chatCurrentDevice) area.innerHTML = `<div style="color:var(--red);padding:20px">Lỗi: ${e.message}</div>`;
+    // During realtime polling do not replace the chat with an error message.
+    if (!silent && deviceID === chatCurrentDevice) {
+      area.innerHTML = `<div style="color:var(--red);padding:20px">Lỗi: ${e.message}</div>`;
+    }
   }
 }
 
-function renderMessages(msgs) {
+function renderMessages(msgs, keepBottom = true) {
   const area = document.getElementById('chat-messages-area');
   if (!msgs.length) {
     area.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px;font-size:13px">Chưa có tin nhắn nào</div>';
@@ -2185,7 +2231,7 @@ function renderMessages(msgs) {
     </div>`;
   }).join('');
 
-  area.scrollTop = area.scrollHeight;
+  if (keepBottom) area.scrollTop = area.scrollHeight;
 }
 
 // ── Context menu & message delete ────────────────────────────────────────
