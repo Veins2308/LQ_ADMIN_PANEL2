@@ -11,6 +11,55 @@
  * - No-cache
  */
 
+
+const CHAT_DEFAULT_USER_AVATAR =
+  'https://cdn.phototourl.com/free/2026-08-08-05ad8b1a-ef8c-4d7c-a0e7-8513fe42ffe8.jpg';
+
+const CHAT_DEFAULT_ADMIN_AVATAR =
+  'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4Ij48cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjY0IiBmaWxsPSIjMmEyZjQ1Ii8+PGNpcmNsZSBjeD0iNjQiIGN5PSI0OCIgcj0iMjQiIGZpbGw9IiNkMWQ1ZGIiLz48cGF0aCBkPSJNMjQgMTEyYzYtMjYgMjItMzggNDAtMzhzMzQgMTIgNDAgMzgiIGZpbGw9IiM5Y2EzYWYiLz48cGF0aCBkPSJNMzAgMjJsMTIgMTAgMjItMTYgMjIgMTYgMTItMTAtNCAzMkgzNHoiIGZpbGw9IiNlZjQ0NDQiLz48L3N2Zz4=';
+
+async function validateChatUser(env, deviceID, key) {
+  if (!deviceID || !key) return false;
+  const raw = await env.KEYS_KV.get(`key:${key}`);
+  if (!raw) return false;
+
+  try {
+    const record = JSON.parse(raw);
+    if (record.status !== 'valid') return false;
+    if (!record.expiresAt || new Date(record.expiresAt) <= new Date()) return false;
+    return (record.devices || []).some(d => d.id === deviceID);
+  } catch {
+    return false;
+  }
+}
+
+async function getChatAdminProfile(env) {
+  const raw = await env.KEYS_KV.get('chat:admin:profile');
+  if (!raw) {
+    return { name: 'Admin', avatar: CHAT_DEFAULT_ADMIN_AVATAR };
+  }
+
+  try {
+    const p = JSON.parse(raw);
+    return {
+      name: String(p.name || 'Admin').slice(0, 80) || 'Admin',
+      avatar: String(p.avatar || CHAT_DEFAULT_ADMIN_AVATAR)
+    };
+  } catch {
+    return { name: 'Admin', avatar: CHAT_DEFAULT_ADMIN_AVATAR };
+  }
+}
+
+function sanitizeChatProfile(profile, fallbackName, fallbackAvatar) {
+  const name = String(profile?.name || fallbackName || '').trim().slice(0, 80);
+  let avatar = String(profile?.avatar || fallbackAvatar || '').trim();
+  if (avatar.length > 350000) avatar = fallbackAvatar || '';
+  return {
+    name: name || fallbackName || 'Admin',
+    avatar: avatar || fallbackAvatar || ''
+  };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1330,13 +1379,15 @@ export default {
         deviceID,
         key,
         message,
-        requestId
+        requestId,
+        userName,
+        userAvatar
       } = body;
 
       const text =
         String(message || '').trim();
 
-      if (!deviceID || !text) {
+      if (!deviceID || !key || !text) {
         return json(
           {
             error:
@@ -1344,6 +1395,14 @@ export default {
           },
           corsHeaders,
           400
+        );
+      }
+
+      if (!(await validateChatUser(env, deviceID, key))) {
+        return json(
+          { error: 'Unauthorized key/device' },
+          corsHeaders,
+          401
         );
       }
 
@@ -1363,6 +1422,14 @@ export default {
               key: key || '',
               messages: []
             };
+
+      const profile = sanitizeChatProfile(
+        { name: userName, avatar: userAvatar },
+        'USER',
+        CHAT_DEFAULT_USER_AVATAR
+      );
+      record.userName = profile.name;
+      record.userAvatar = profile.avatar;
 
       if (!Array.isArray(record.messages)) {
         record.messages = [];
@@ -1575,14 +1642,27 @@ export default {
       const deviceID =
         url.searchParams.get('device');
 
+      const key =
+        request.headers.get('X-Auth-Key') ||
+        url.searchParams.get('key') ||
+        '';
+
       const after =
         url.searchParams.get('after') || '';
 
-      if (!deviceID) {
+      if (!deviceID || !key) {
         return json(
-          { error: 'Missing device' },
+          { error: 'Missing device or key' },
           corsHeaders,
           400
+        );
+      }
+
+      if (!(await validateChatUser(env, deviceID, key))) {
+        return json(
+          { error: 'Unauthorized key/device' },
+          corsHeaders,
+          401
         );
       }
 
@@ -1598,7 +1678,12 @@ export default {
         return json(
           {
             messages: [],
-            unread: 0
+            unread: 0,
+            userProfile: {
+              name: 'USER',
+              avatar: CHAT_DEFAULT_USER_AVATAR
+            },
+            adminProfile: await getChatAdminProfile(env)
           },
           corsHeaders
         );
@@ -1679,28 +1764,144 @@ export default {
         }
       });
 
+      const hideRaw =
+        await env.KEYS_KV.get('chat:admin:hidestatus');
+      let hideAdminStatus = false;
+      if (hideRaw) {
+        try { hideAdminStatus = !!JSON.parse(hideRaw).enabled; } catch {}
+      }
+
+      const adminProfile = await getChatAdminProfile(env);
+      const userProfile = sanitizeChatProfile(
+        {
+          name: record.userName,
+          avatar: record.userAvatar
+        },
+        'USER',
+        CHAT_DEFAULT_USER_AVATAR
+      );
+
       const processedMsgs =
         Array.from(
           byId.values()
         ).map(m => ({
           ...m,
-
           adminSeen:
             m.from === 'user'
               ? (
                   m.readByAdmin === true &&
-                  m.hideAdminStatus !== true
+                  !hideAdminStatus
                 )
               : undefined
         }));
 
       return json(
         {
-          messages:
-            processedMsgs,
+          messages: processedMsgs,
           statusUpdates: [],
-          unread
+          unread,
+          userProfile,
+          adminProfile,
+          hideAdminStatus
         },
+        corsHeaders
+      );
+    }
+
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /api/chat/profile
+    // User cập nhật tên + avatar
+    // ─────────────────────────────────────────────────────────────────────
+    if (
+      url.pathname === '/api/chat/profile' &&
+      request.method === 'POST'
+    ) {
+      let body;
+      try { body = await request.json(); }
+      catch {
+        return json({ error: 'Invalid JSON' }, corsHeaders, 400);
+      }
+
+      const deviceID =
+        body.deviceID ||
+        request.headers.get('X-Device-ID') ||
+        '';
+      const key =
+        body.key ||
+        request.headers.get('X-Auth-Key') ||
+        '';
+
+      if (!(await validateChatUser(env, deviceID, key))) {
+        return json({ error: 'Unauthorized key/device' }, corsHeaders, 401);
+      }
+
+      const chatKey = `chat:${deviceID}`;
+      const raw = await env.KEYS_KV.get(chatKey);
+      let record = raw ? JSON.parse(raw) : {
+        deviceID,
+        key,
+        messages: []
+      };
+
+      const profile = sanitizeChatProfile(
+        {
+          name: body.name,
+          avatar: body.avatar
+        },
+        'USER',
+        CHAT_DEFAULT_USER_AVATAR
+      );
+
+      record.userName = profile.name;
+      record.userAvatar = profile.avatar;
+      record.key = key;
+      record.updatedAt = new Date().toISOString();
+
+      await env.KEYS_KV.put(
+        chatKey,
+        JSON.stringify(record),
+        { expirationTtl: 60 * 60 * 24 * 90 }
+      );
+
+      return json(
+        { success: true, userProfile: profile },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // GET /api/chat/profile
+    // User đọc profile hiện tại
+    // ─────────────────────────────────────────────────────────────────────
+    if (
+      url.pathname === '/api/chat/profile' &&
+      request.method === 'GET'
+    ) {
+      const deviceID =
+        url.searchParams.get('device') ||
+        request.headers.get('X-Device-ID') ||
+        '';
+      const key =
+        request.headers.get('X-Auth-Key') ||
+        url.searchParams.get('key') ||
+        '';
+
+      if (!(await validateChatUser(env, deviceID, key))) {
+        return json({ error: 'Unauthorized key/device' }, corsHeaders, 401);
+      }
+
+      const raw = await env.KEYS_KV.get(`chat:${deviceID}`);
+      const record = raw ? JSON.parse(raw) : {};
+      const userProfile = sanitizeChatProfile(
+        { name: record.userName, avatar: record.userAvatar },
+        'USER',
+        CHAT_DEFAULT_USER_AVATAR
+      );
+      const adminProfile = await getChatAdminProfile(env);
+
+      return json(
+        { userProfile, adminProfile },
         corsHeaders
       );
     }
@@ -1827,7 +2028,12 @@ export default {
           return 'empty';
         }
 
-        let revision = '';
+        let revision = [
+          'record',
+          record.updatedAt || '',
+          record.adminProfileRevision || '',
+          record.hideStatusRevision || ''
+        ].join(':') + ';';
 
         for (const m of messages) {
           revision += [
@@ -1848,17 +2054,16 @@ export default {
         return revision;
       }
 
-      function processMessages(record) {
+      function processMessages(record, hideStatus = false) {
         return (
           record.messages || []
         ).map(m => ({
           ...m,
-
           adminSeen:
             m.from === 'user'
               ? (
                   m.readByAdmin === true &&
-                  m.hideAdminStatus !== true
+                  !hideStatus
                 )
               : undefined
         }));
@@ -1921,7 +2126,14 @@ export default {
             revision:
               getRevision(record),
             messages:
-              processMessages(record)
+              processMessages(record, hideStatus),
+            userProfile: sanitizeChatProfile(
+              { name: record.userName, avatar: record.userAvatar },
+              'USER',
+              CHAT_DEFAULT_USER_AVATAR
+            ),
+            adminProfile: await getChatAdminProfile(env),
+            hideAdminStatus: hideStatus
           },
           corsHeaders
         );
@@ -2027,7 +2239,14 @@ export default {
               revision:
                 getRevision(record),
               messages:
-                processMessages(record)
+                processMessages(record, hideStatus),
+              userProfile: sanitizeChatProfile(
+                { name: record.userName, avatar: record.userAvatar },
+                'USER',
+                CHAT_DEFAULT_USER_AVATAR
+              ),
+              adminProfile: await getChatAdminProfile(env),
+              hideAdminStatus: hideStatus
             },
             corsHeaders
           );
@@ -2057,7 +2276,14 @@ export default {
                 revision:
                   getRevision(record),
                 messages:
-                  processMessages(record)
+                  processMessages(record, hideStatus),
+                userProfile: sanitizeChatProfile(
+                  { name: record.userName, avatar: record.userAvatar },
+                  'USER',
+                  CHAT_DEFAULT_USER_AVATAR
+                ),
+                adminProfile: await getChatAdminProfile(env),
+                hideAdminStatus: hideStatus
               },
               corsHeaders
             );
@@ -2078,6 +2304,22 @@ export default {
       const finalRevision =
         getRevision(record);
 
+      const finalHideStatus =
+        await getHideStatus();
+
+      const finalAdminProfile =
+        await getChatAdminProfile(env);
+
+      const finalUserProfile =
+        sanitizeChatProfile(
+          {
+            name: record.userName,
+            avatar: record.userAvatar
+          },
+          'USER',
+          CHAT_DEFAULT_USER_AVATAR
+        );
+
       return json(
         {
           success: true,
@@ -2089,7 +2331,10 @@ export default {
           revision:
             finalRevision,
           messages:
-            processMessages(record)
+            processMessages(record, finalHideStatus),
+          userProfile: finalUserProfile,
+          adminProfile: finalAdminProfile,
+          hideAdminStatus: finalHideStatus
         },
         corsHeaders
       );
@@ -2759,6 +3004,12 @@ export default {
               unread:
                 unreadFromUser,
 
+              userProfile: sanitizeChatProfile(
+                { name: record.userName, avatar: record.userAvatar },
+                'USER',
+                CHAT_DEFAULT_USER_AVATAR
+              ),
+
               lastMessage:
                 lastMsg || null
             });
@@ -2847,12 +3098,38 @@ export default {
       const { enabled } =
         body;
 
+      const hideRevision = Date.now();
+
       await env.KEYS_KV.put(
         'chat:admin:hidestatus',
         JSON.stringify({
-          enabled: !!enabled
+          enabled: !!enabled,
+          revision: hideRevision
         })
       );
+
+      // Touch conversations so open long-polls immediately re-render
+      // the read-status state for already-read messages.
+      const listed = await env.KEYS_KV.list({ prefix: 'chat:' });
+      for (const item of listed.keys) {
+        if (
+          item.name === 'chat:admin:hidestatus' ||
+          item.name === 'chat:admin:profile'
+        ) continue;
+
+        const raw = await env.KEYS_KV.get(item.name);
+        if (!raw) continue;
+        try {
+          const record = JSON.parse(raw);
+          record.hideStatusRevision = hideRevision;
+          record.updatedAt = new Date().toISOString();
+          await env.KEYS_KV.put(
+            item.name,
+            JSON.stringify(record),
+            { expirationTtl: 60 * 60 * 24 * 90 }
+          );
+        } catch {}
+      }
 
       return json(
         {
@@ -2988,6 +3265,12 @@ export default {
 
             unread:
               unreadFromUser,
+
+            userProfile: sanitizeChatProfile(
+              { name: record.userName, avatar: record.userAvatar },
+              'USER',
+              CHAT_DEFAULT_USER_AVATAR
+            ),
 
             messages:
               msgs,
@@ -3255,6 +3538,86 @@ export default {
         {
           success: true
         },
+        corsHeaders
+      );
+    }
+
+
+    // ─────────────────────────────────────────────────────────────────────
+    // GET /api/admin/chat/profile
+    // ─────────────────────────────────────────────────────────────────────
+    if (
+      url.pathname === '/api/admin/chat/profile' &&
+      request.method === 'GET'
+    ) {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) {
+        return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      }
+
+      return json(
+        { profile: await getChatAdminProfile(env) },
+        corsHeaders
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // POST /api/admin/chat/profile
+    // ─────────────────────────────────────────────────────────────────────
+    if (
+      url.pathname === '/api/admin/chat/profile' &&
+      request.method === 'POST'
+    ) {
+      const adminToken = request.headers.get('X-Admin-Token');
+      if (adminToken !== env.ADMIN_TOKEN) {
+        return json({ error: 'Unauthorized' }, corsHeaders, 401);
+      }
+
+      let body;
+      try { body = await request.json(); }
+      catch {
+        return json({ error: 'Invalid JSON' }, corsHeaders, 400);
+      }
+
+      const current = await getChatAdminProfile(env);
+      const profile = sanitizeChatProfile(
+        body,
+        current.name || 'Admin',
+        current.avatar || CHAT_DEFAULT_ADMIN_AVATAR
+      );
+
+      await env.KEYS_KV.put(
+        'chat:admin:profile',
+        JSON.stringify({
+          ...profile,
+          updatedAt: new Date().toISOString()
+        })
+      );
+
+      // Touch every existing conversation so user clients notice the
+      // profile change immediately on their next poll.
+      const listed = await env.KEYS_KV.list({ prefix: 'chat:' });
+      for (const item of listed.keys) {
+        if (
+          item.name === 'chat:admin:profile' ||
+          item.name === 'chat:admin:hidestatus'
+        ) continue;
+
+        const raw = await env.KEYS_KV.get(item.name);
+        if (!raw) continue;
+        try {
+          const record = JSON.parse(raw);
+          record.adminProfileRevision = Date.now();
+          await env.KEYS_KV.put(
+            item.name,
+            JSON.stringify(record),
+            { expirationTtl: 60 * 60 * 24 * 90 }
+          );
+        } catch {}
+      }
+
+      return json(
+        { success: true, profile },
         corsHeaders
       );
     }
