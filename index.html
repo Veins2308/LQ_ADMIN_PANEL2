@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod21</title>
+<title>🔐 Key Manager - LQ Mod22</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -1161,7 +1161,7 @@ function renderDevicesList(key, filterQ) {
           ⌨️ Log bàn phím
         </button>
         <button class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#059669;color:#fff;position:relative"
-          onclick="closeModal('devices-modal');openChatPanel();openConversation('${idEsc}','${keyEsc}')">
+          onclick="closeModal('devices-modal');openChatPanel('${idEsc}')">
           💬 Chat${unreadBadgeHtml}
         </button>
       </div>
@@ -2104,11 +2104,20 @@ function applyChatProfiles(data) {
   }
 }
 
-function openChatPanel() {
+async function openChatPanel(preferredDeviceID = '') {
   document.getElementById('chat-panel').classList.add('open');
-  refreshChatConversations();
-  fetchHideStatus();
-  loadAdminProfile();
+  await Promise.all([refreshChatConversations(), fetchHideStatus(), loadAdminProfile()]);
+
+  // Nếu cửa sổ chat mở từ phần thiết bị, chuyển ngay sang đúng thiết bị.
+  const target = preferredDeviceID
+    ? chatConversations.find(c => String(c.deviceID) === String(preferredDeviceID))
+    : (chatCurrentDevice
+        ? chatConversations.find(c => String(c.deviceID) === String(chatCurrentDevice))
+        : chatConversations[0]);
+
+  if (target) {
+    await openConversation(target.deviceID, target.key);
+  }
 }
 
 function closeChatPanel() {
@@ -2187,30 +2196,19 @@ async function startChatRealtime(deviceID, immediate = false) {
 
   try {
     if (immediate) {
-      // Khi gọi từ startChatUnreadPoll (app load lại), fetch đầy đủ
       await loadConversationMessages(deviceID, false);
     }
 
-    // Lấy revision hiện tại trước khi bắt đầu long-poll.
-    // Khi immediate=false (gọi từ openConversation), openConversation đã load messages rồi
-    // → chỉ cần lấy revision, không render lại để tránh flash/double-render.
+    // Lấy revision hiện tại trước khi chờ.
     try {
       const initial = await apiGet(
         `/api/admin/chat/messages?device=${encodeURIComponent(deviceID)}&_t=${Date.now()}`
       );
       if (deviceID !== chatCurrentDevice) return;
       chatRealtimeRevision = initial.revision || '';
-      // Chỉ update messages/render nếu immediate=true hoặc nếu dữ liệu thực sự khác
-      const nextMsgs = initial.messages || [];
-      const changed = JSON.stringify(nextMsgs) !== JSON.stringify(chatCurrentMessages || []);
-      if (immediate || changed) {
-        chatCurrentMessages = nextMsgs;
-        applyChatProfiles(initial);
-        renderMessages(chatCurrentMessages, true);
-      } else {
-        // Vẫn cập nhật profiles (admin name/avatar) mà không render lại
-        applyChatProfiles(initial);
-      }
+      chatCurrentMessages = initial.messages || [];
+      applyChatProfiles(initial);
+      renderMessages(chatCurrentMessages, true);
     } catch (_) {}
 
     while (!chatRealtimeStop && chatRealtimeDevice === deviceID && chatCurrentDevice === deviceID) {
@@ -2270,30 +2268,31 @@ function _updateNavBadge(total) {
 async function refreshChatConversations(silent = false) {
   try {
     const data = await apiGet('/api/admin/chat/allconversations?_t=' + Date.now());
-    const newConvs = data.conversations || [];
-    // Chỉ cập nhật chatConversations khi server trả về dữ liệu hợp lệ (không rỗng hoặc đã có dữ liệu)
-    // Tránh xóa list cũ khi API trả về mảng rỗng tạm thời
-    if (newConvs.length > 0 || chatConversations.length === 0) {
-      chatConversations = newConvs.map(c => {
-        const devName = _getDeviceName(c.deviceID, c.key);
-        if (c.userProfile) chatUserProfile = c.userProfile;
-        return { ...c, deviceName: devName };
-      });
-    } else if (newConvs.length === 0 && chatConversations.length > 0) {
-      // Server trả về rỗng nhưng ta đang có conversations → merge unread từ sidebar poll
-      // Giữ nguyên chatConversations, chỉ cập nhật unread nếu có
-      chatConversations = chatConversations.map(c => ({ ...c, deviceName: _getDeviceName(c.deviceID, c.key) }));
+    const incoming = Array.isArray(data.conversations) ? data.conversations : [];
+
+    // Mỗi conversation gắn với đúng deviceID. Không ghi đè chatUserProfile
+    // bằng conversation cuối cùng vì sẽ làm avatar/tên của thiết bị đang mở bị sai.
+    chatConversations = incoming.map(c => ({
+      ...c,
+      deviceName: _getDeviceName(c.deviceID, c.key)
+    }));
+
+    const current = chatConversations.find(c => String(c.deviceID) === String(chatCurrentDevice));
+    if (current && current.userProfile) {
+      chatUserProfile = {
+        name: String(current.userProfile.name || 'USER'),
+        avatar: String(current.userProfile.avatar || '')
+      };
+      if (chatCurrentDevice && Array.isArray(chatCurrentMessages) && chatCurrentMessages.length) {
+        renderMessages(chatCurrentMessages, true);
+      }
     }
+
     filterChatConversations(_chatSearchQuery);
     const total = chatConversations.reduce((s, c) => s + (c.unread || 0), 0);
     _updateNavBadge(total);
   } catch(e) {
-    // API lỗi → giữ nguyên danh sách cũ, không xóa
     console.error('Chat refresh failed', e);
-    // Vẫn render lại để giữ active highlight đúng
-    if (chatConversations.length > 0) {
-      filterChatConversations(_chatSearchQuery);
-    }
   }
 }
 
@@ -2343,18 +2342,8 @@ function renderConversationList() {
 
 // ── Open a specific conversation ───────────────────────────────────────────
 async function openConversation(deviceID, key) {
-  // 1. Dừng long-poll cũ TRƯỚC khi thay đổi chatCurrentDevice
-  //    để tránh race condition: long-poll cũ render đè lên conversation mới.
-  stopChatRealtime();
-
-  // 2. Sau khi đã stop, mới gán device mới
   chatCurrentDevice = deviceID;
   chatCurrentKey    = key;
-  chatCurrentMessages = [];
-
-  // 3. Hiện "Đang tải..." ngay lập tức để user thấy đang chuyển
-  const area = document.getElementById('chat-messages-area');
-  if (area) area.innerHTML = '<div style="text-align:center;color:var(--text2);padding:40px;font-size:13px">⏳ Đang tải...</div>';
 
   // Find device name
   const devName = _getDeviceName(deviceID, key);
@@ -2372,15 +2361,10 @@ async function openConversation(deviceID, key) {
   const historyResults = document.getElementById('chat-history-results');
   if (historyResults) historyResults.classList.remove('open');
   renderConversationList(); // refresh active highlight
-
-  // 4. Gán lại chatRealtimeDevice sau stopChatRealtime (stop đã set null)
+  stopChatRealtime();
   chatRealtimeDevice = deviceID;
   chatRealtimeRevision = '';
-
-  // 5. Load messages ngay (không qua startChatRealtime để tránh double-render)
   await loadConversationMessages(deviceID);
-
-  // 6. Bắt đầu long-poll với immediate=false (không fetch lại lần nữa)
   startChatRealtime(deviceID, false);
 }
 
@@ -2787,8 +2771,7 @@ window.renderTable = function() {
     chatBtn.onclick = () => {
       const firstDevice = (k.devices||[])[0];
       if (!firstDevice) return;
-      openChatPanel();
-      openConversation(firstDevice.id, k.key);
+      void openChatPanel(firstDevice.id);
     };
     actionsCell.appendChild(chatBtn);
   });
