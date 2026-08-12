@@ -737,7 +737,7 @@
     <div class="chat-toolbar">
       <b style="font-size:14px;color:var(--accent)">💬 Chat Admin</b>
       <button class="btn btn-success btn-sm" onclick="openBroadcastModal()">📢 Gửi tất cả</button>
-      <label class="hide-status-toggle" title="Khi bật, mọi tin nhắn người dùng đã được admin đọc sẽ ẩn trạng thái 'Đã xem' trên thiết bị người dùng, kể cả tin đã đọc trước đó.">
+      <label class="hide-status-toggle" title="Khi bật: chỉ ảnh hưởng tin nhắn MỚI gửi sau khi bật — hiện là 'Chưa đọc'. Tin đã đọc trước đó vẫn giữ nguyên 'Đã xem'. Khi tắt: tin đã đọc hiện 'Đã xem', chưa đọc hiện 'Chưa đọc'.">
         <input type="checkbox" id="hide-status-chk" onchange="toggleHideStatus(this.checked)">
         Ẩn trạng thái đã xem
       </label>
@@ -2760,7 +2760,7 @@ async function toggleHideStatus(enabled) {
   try {
     await apiPost('/api/admin/chat/hidestatus', { enabled });
     chatHideStatus = enabled;
-    showToast(enabled ? '👁 Ẩn trạng thái đã bật — chỉ ẩn tin mới' : '👁 Ẩn trạng thái đã tắt', 'ok');
+    showToast(enabled ? '👁 Ẩn trạng thái đã bật — tin nhắn tiếp theo sẽ hiện là chưa đọc; tin đã đọc trước vẫn giữ nguyên' : '👁 Ẩn trạng thái đã tắt — tin đã đọc hiện đã xem, chưa đọc hiện chưa đọc', 'ok');
   } catch(e) {
     showToast('❌ ' + e.message, 'err');
   }
