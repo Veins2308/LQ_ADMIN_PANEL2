@@ -2063,7 +2063,9 @@ export default {
             m.from === 'user'
               ? (
                   m.readByAdmin === true &&
-                  !hideStatus
+                  // Tin đã đọc trước đó: dùng snapshot hideAdminStatus tại thời điểm đọc.
+                  // Tin chưa đọc hoặc mới đọc ngay bây giờ: dùng hideStatus hiện tại.
+                  !(m.hideAdminStatus !== undefined ? m.hideAdminStatus : hideStatus)
                 )
               : undefined
         }));
