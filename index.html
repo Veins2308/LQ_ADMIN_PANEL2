@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod18</title>
+<title>🔐 Key Manager - LQ Mod19</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -2407,7 +2407,8 @@ function renderMessages(msgs, keepBottom = true) {
     }
 
     const isUser = from === 'user';
-    const name = isUser ? `${userName} <span style="opacity:.7;font-weight:600">(Bạn)</span>` : adminName;
+    // Trên web admin hiển thị "(user)" kế tên người dùng để phân biệt
+    const name = isUser ? `${userName} <span style="opacity:.7;font-weight:600">(user)</span>` : adminName;
     const avatar = isUser ? userAvatar : adminAvatar;
 
     let statusHtml = '';
