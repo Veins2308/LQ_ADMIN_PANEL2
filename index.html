@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔐 Key Manager - LQ Mod10</title>
+<title>🔐 Key Manager - LQ Mod11</title>
 <style>
   :root {
     --bg: #0a0e1a;
@@ -2115,8 +2115,10 @@ function renderMessages(msgs) {
     const from = m.from || 'user';
     const text = escapeHtml(m.text || '');
     const ts   = formatMsgTime(m.ts || '');
-    const msgId = m.id || '';
-    const devID = chatCurrentDevice || '';
+    const msgId = String(m.id || '');
+    const devID = String(chatCurrentDevice || '');
+    const msgIdSafe = msgId.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const devIDSafe = devID.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
     if (from === 'system') {
       return `<div class="chat-msg system">
@@ -2134,9 +2136,9 @@ function renderMessages(msgs) {
         : `<span class="unseen">✓ Chưa đọc</span>`;
     }
 
-    return `<div class="chat-msg ${from}" data-msg-id="${msgId}"
-      oncontextmenu="showMsgCtxMenu(event,'${msgId.replace(/'/g,"\\'")}','${devID.replace(/'/g,"\\'")}');return false;"
-      onmousedown="if(event.button===2)showMsgCtxMenu(event,'${msgId.replace(/'/g,"\\'")}','${devID.replace(/'/g,"\\'")}')">
+    return `<div class="chat-msg ${from}" data-msg-id="${msgIdSafe}"
+      oncontextmenu="showMsgCtxMenu(event,'${msgIdSafe}','${devIDSafe}');return false;"
+      onmousedown="if(event.button===2)showMsgCtxMenu(event,'${msgIdSafe}','${devIDSafe}')">
       <div class="chat-bubble">${text}</div>
       <div class="chat-meta">${ts} ${statusHtml}</div>
     </div>`;
