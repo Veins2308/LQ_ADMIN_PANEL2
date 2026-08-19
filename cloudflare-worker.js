@@ -18,6 +18,43 @@ const CHAT_DEFAULT_USER_AVATAR =
 const CHAT_DEFAULT_ADMIN_AVATAR =
   'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4Ij48cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjY0IiBmaWxsPSIjMmEyZjQ1Ii8+PGNpcmNsZSBjeD0iNjQiIGN5PSI0OCIgcj0iMjQiIGZpbGw9IiNkMWQ1ZGIiLz48cGF0aCBkPSJNMjQgMTEyYzYtMjYgMjItMzggNDAtMzhzMzQgMTIgNDAgMzgiIGZpbGw9IiM5Y2EzYWYiLz48cGF0aCBkPSJNMzAgMjJsMTIgMTAgMjItMTYgMjIgMTYgMTItMTAtNCAzMkgzNHoiIGZpbGw9IiNlZjQ0NDQiLz48L3N2Zz4=';
 
+// ════════════════════════════════════════════════════════════════════════════
+// Dashboard runtime cache: avoids repeated KV.list() calls from polling.
+// The cache is per Worker isolate and never replaces KV as the source of truth.
+// Add ?fresh=1 when an explicit/manual refresh is required.
+// ════════════════════════════════════════════════════════════════════════════
+const LQ_RUNTIME_CACHE = globalThis.__LQ_RUNTIME_CACHE || new Map();
+globalThis.__LQ_RUNTIME_CACHE = LQ_RUNTIME_CACHE;
+
+function runtimeCacheGet(name, maxAgeMs) {
+  const hit = LQ_RUNTIME_CACHE.get(name);
+  if (!hit) return null;
+  if (Date.now() - hit.ts > maxAgeMs) {
+    LQ_RUNTIME_CACHE.delete(name);
+    return null;
+  }
+  return hit.value;
+}
+
+function runtimeCacheSet(name, value) {
+  LQ_RUNTIME_CACHE.set(name, { ts: Date.now(), value });
+  if (LQ_RUNTIME_CACHE.size > 16) {
+    const entries = [...LQ_RUNTIME_CACHE.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    for (let i = 0; i < Math.max(0, entries.length - 12); i++) {
+      LQ_RUNTIME_CACHE.delete(entries[i][0]);
+    }
+  }
+  return value;
+}
+
+function runtimeCacheDelete(name) {
+  LQ_RUNTIME_CACHE.delete(name);
+}
+
+function freshRequested(url) {
+  return url.searchParams.get('fresh') === '1';
+}
+
 async function validateChatUser(env, deviceID, key) {
   if (!deviceID || !key) return false;
   const raw = await env.KEYS_KV.get(`key:${key}`);
@@ -65,7 +102,8 @@ function sanitizeChatProfile(profile, fallbackName, fallbackAvatar) {
 // AUTH — account registration/login/session. Secrets stay in Worker env.
 // Required Worker secrets:
 //   AUTH_SECRET             random long secret used to sign sessions
-//   BOOTSTRAP_ADMIN_SECRET  one-time/setup code used to create an Admin
+//   LEGACY_ADMIN_USERNAME   username của Admin gốc
+//   LEGACY_ADMIN_PASSWORD   password của Admin gốc
 // ═══════════════════════════════════════════════════════════════════════════
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
@@ -199,6 +237,17 @@ async function getSessionUser(request, env) {
   }
 }
 
+function isLegacyAdminUsername(username, env) {
+  return !!(
+    env.LEGACY_ADMIN_USERNAME &&
+    normalizeUsername(username) === normalizeUsername(env.LEGACY_ADMIN_USERNAME)
+  );
+}
+
+function isLegacyRootUser(user, env) {
+  return !!user && isLegacyAdminUsername(user.username, env);
+}
+
 async function requireAdmin(request, env) {
   const user = await getSessionUser(request, env);
   if (user && user.role === 'admin') return null;
@@ -206,6 +255,15 @@ async function requireAdmin(request, env) {
   return json({ error: 'Unauthorized' }, {
     'Content-Type': 'application/json; charset=utf-8'
   }, 401);
+}
+
+async function requireLegacyRootAdmin(request, env) {
+  const user = await getSessionUser(request, env);
+  if (user && user.role === 'admin' && isLegacyRootUser(user, env)) return null;
+
+  return json({ error: 'Chỉ Admin gốc mới có quyền quản lý tài khoản.' }, {
+    'Content-Type': 'application/json; charset=utf-8'
+  }, 403);
 }
 
 async function createSessionToken(user, env) {
@@ -218,13 +276,14 @@ async function createSessionToken(user, env) {
   }, env.AUTH_SECRET);
 }
 
-function safeUser(user) {
+function safeUser(user, env = null) {
   return {
     username: user.username,
     role: user.role,
     status: user.status,
     createdAt: user.createdAt,
-    lastLogin: user.lastLogin || null
+    lastLogin: user.lastLogin || null,
+    isRoot: !!(env && isLegacyRootUser(user, env))
   };
 }
 
@@ -253,6 +312,13 @@ export default {
       });
     }
 
+    if (request.method === 'POST' && url.pathname.startsWith('/api/admin/')) {
+      runtimeCacheDelete('admin:list');
+      runtimeCacheDelete('admin:users');
+      runtimeCacheDelete('admin:chat:unread');
+      runtimeCacheDelete('admin:chat:all');
+    }
+
 
     // ══════════════════════════════════════════════════════════════════════
     // ACCOUNT AUTH
@@ -269,8 +335,8 @@ export default {
 
       const username = normalizeUsername(body.username);
       const password = String(body.password || '');
-      const setupCode = String(body.setupCode || '');
-
+      // Mọi tài khoản đăng ký trên web luôn bắt đầu là MEMBER.
+      // Chỉ tài khoản LEGACY_ADMIN_USERNAME / LEGACY_ADMIN_PASSWORD mới là Admin gốc.
       if (!validUsername(username)) {
         return json({ error: 'Tên tài khoản phải 3–32 ký tự, chỉ gồm chữ, số, dấu . _ -' }, corsHeaders, 400);
       }
@@ -283,10 +349,7 @@ export default {
         return json({ error: 'Tên tài khoản đã tồn tại' }, corsHeaders, 409);
       }
 
-      let role = 'member';
-      if (env.BOOTSTRAP_ADMIN_SECRET && setupCode && setupCode === env.BOOTSTRAP_ADMIN_SECRET) {
-        role = 'admin';
-      }
+      const role = 'member';
 
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const passwordHash = await derivePasswordHash(password, salt);
@@ -305,7 +368,7 @@ export default {
       await env.KEYS_KV.put(`user:${username}`, JSON.stringify(user));
       const token = await createSessionToken(user, env);
 
-      return json({ success: true, token, user: safeUser(user) }, corsHeaders);
+      return json({ success: true, token, user: safeUser(user, env) }, corsHeaders);
     }
 
     if (url.pathname === '/api/auth/login' && request.method === 'POST') {
@@ -351,7 +414,7 @@ export default {
         return json({
           success: true,
           token,
-          user: safeUser(migratedUser),
+          user: safeUser(migratedUser, env),
           migrated: true
         }, corsHeaders);
       }
@@ -365,8 +428,19 @@ export default {
         return json({ error: 'Tài khoản bị lỗi dữ liệu' }, corsHeaders, 500);
       }
 
-      if (user.status !== 'active' || !user.salt || !user.passwordHash ||
-          !(await verifyPassword(password, user.salt, user.passwordHash))) {
+      const isLegacyRootLogin =
+        env.LEGACY_ADMIN_USERNAME &&
+        env.LEGACY_ADMIN_PASSWORD &&
+        username === normalizeUsername(env.LEGACY_ADMIN_USERNAME) &&
+        password === String(env.LEGACY_ADMIN_PASSWORD);
+
+      if (isLegacyRootLogin) {
+        user.username = username;
+        user.role = 'admin';
+        user.status = 'active';
+        user.migratedFromLegacy = true;
+      } else if (user.status !== 'active' || !user.salt || !user.passwordHash ||
+                 !(await verifyPassword(password, user.salt, user.passwordHash))) {
         return json({ error: 'Sai tên đăng nhập hoặc mật khẩu' }, corsHeaders, 401);
       }
 
@@ -374,13 +448,22 @@ export default {
       await env.KEYS_KV.put(`user:${username}`, JSON.stringify(user));
 
       const token = await createSessionToken(user, env);
-      return json({ success: true, token, user: safeUser(user) }, corsHeaders);
+      return json({ success: true, token, user: safeUser(user, env) }, corsHeaders);
     }
 
     if (url.pathname === '/api/auth/me' && request.method === 'GET') {
       const user = await getSessionUser(request, env);
       if (!user) return json({ error: 'Session expired' }, corsHeaders, 401);
-      return json({ user: safeUser(user) }, corsHeaders);
+      return json({ user: safeUser(user, env) }, corsHeaders);
+    }
+
+    if (url.pathname === '/api/auth/status' && request.method === 'GET') {
+      const user = await getSessionUser(request, env);
+      if (!user) return json({ active: false }, corsHeaders, 401);
+      return json({
+        active: true,
+        user: safeUser(user, env)
+      }, corsHeaders);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -543,8 +626,13 @@ export default {
     // ══════════════════════════════════════════════════════════════════════
 
     if (url.pathname === '/api/admin/users' && request.method === 'GET') {
-      const auth = await requireAdmin(request, env);
+      const auth = await requireLegacyRootAdmin(request, env);
       if (auth) return auth;
+
+      if (!freshRequested(url)) {
+        const cachedUsers = runtimeCacheGet('admin:users', 180000);
+        if (cachedUsers) return json({ users: cachedUsers }, corsHeaders);
+      }
 
       const listed = await env.KEYS_KV.list({ prefix: 'user:' });
       const users = [];
@@ -554,16 +642,17 @@ export default {
         if (!raw) continue;
         try {
           const user = JSON.parse(raw);
-          users.push(safeUser(user));
+          users.push(safeUser(user, env));
         } catch {}
       }
 
       users.sort((a, b) => String(a.username).localeCompare(String(b.username)));
+      runtimeCacheSet('admin:users', users);
       return json({ users }, corsHeaders);
     }
 
     if (url.pathname === '/api/admin/users/role' && request.method === 'POST') {
-      const auth = await requireAdmin(request, env);
+      const auth = await requireLegacyRootAdmin(request, env);
       if (auth) return auth;
 
       let body;
@@ -578,7 +667,13 @@ export default {
       }
 
       const current = await getSessionUser(request, env);
-      if (current && current.username === username && role !== 'admin') {
+      if (!current || !isLegacyRootUser(current, env)) {
+        return json({ error: 'Chỉ Admin gốc mới được thay đổi quyền tài khoản.' }, corsHeaders, 403);
+      }
+      if (isLegacyAdminUsername(username, env) && role !== 'admin') {
+        return json({ error: 'Không thể hạ quyền Admin gốc.' }, corsHeaders, 400);
+      }
+      if (current.username === username && role !== 'admin') {
         return json({ error: 'Không thể tự hạ quyền tài khoản đang đăng nhập' }, corsHeaders, 400);
       }
 
@@ -591,9 +686,18 @@ export default {
       }
 
       user.role = role;
+      if (isLegacyAdminUsername(username, env)) {
+        user.role = 'admin';
+        user.status = 'active';
+        user.migratedFromLegacy = true;
+      }
       await env.KEYS_KV.put(`user:${username}`, JSON.stringify(user));
 
-      return json({ success: true, user: safeUser(user) }, corsHeaders);
+      return json({
+        success: true,
+        user: safeUser(user, env),
+        roleChangedAt: new Date().toISOString()
+      }, corsHeaders);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -604,6 +708,11 @@ export default {
     if (url.pathname === '/api/admin/list') {
       const auth = await requireAdmin(request, env);
       if (auth) return auth;
+
+      if (!freshRequested(url)) {
+        const cachedKeys = runtimeCacheGet('admin:list', 180000);
+        if (cachedKeys) return json(cachedKeys, corsHeaders);
+      }
 
       const listed =
         await env.KEYS_KV.list({
@@ -621,18 +730,6 @@ export default {
 
         try {
           const record = JSON.parse(raw);
-
-          if (
-            record.status === 'valid' &&
-            new Date(record.expiresAt) < now
-          ) {
-            record.status = 'expired';
-
-            await env.KEYS_KV.put(
-              item.name,
-              JSON.stringify(record)
-            );
-          }
 
           const devices =
             record.devices || [];
@@ -666,7 +763,7 @@ export default {
           allKeys.push({
             key: record.key,
             role: record.role,
-            status: record.status,
+            status: (record.status === 'valid' && record.expiresAt && new Date(record.expiresAt) < now) ? 'expired' : record.status,
             maxDevices: record.maxDevices,
             devices: deviceList,
             usedDevices: devices.length,
@@ -686,13 +783,9 @@ export default {
           new Date(a.createdAt)
       );
 
-      return json(
-        {
-          keys: allKeys,
-          total: allKeys.length
-        },
-        corsHeaders
-      );
+      const payload = { keys: allKeys, total: allKeys.length };
+      runtimeCacheSet('admin:list', payload);
+      return json(payload, corsHeaders);
     }
 
     // POST /api/heartbeat
@@ -2383,7 +2476,7 @@ export default {
        * LONG POLLING.
        */
       const MAX_WAIT = 25000;
-      const CHECK_INTERVAL = 500;
+      const CHECK_INTERVAL = 2000;
 
       const startTime =
         Date.now();
@@ -3129,6 +3222,11 @@ export default {
       const auth = await requireAdmin(request, env);
       if (auth) return auth;
 
+      if (!freshRequested(url)) {
+        const cachedUnread = runtimeCacheGet('admin:chat:unread', 180000);
+        if (cachedUnread) return json(cachedUnread, corsHeaders);
+      }
+
       const listed =
         await env.KEYS_KV.list({
           prefix: 'chat:'
@@ -3225,13 +3323,9 @@ export default {
         }
       );
 
-      return json(
-        {
-          conversations:
-            result
-        },
-        corsHeaders
-      );
+      const payload = { conversations: result };
+      runtimeCacheSet('admin:chat:unread', payload);
+      return json(payload, corsHeaders);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -3355,6 +3449,11 @@ export default {
       const auth = await requireAdmin(request, env);
       if (auth) return auth;
 
+      if (!freshRequested(url)) {
+        const cachedAll = runtimeCacheGet('admin:chat:all', 180000);
+        if (cachedAll) return json(cachedAll, corsHeaders);
+      }
+
       const listed =
         await env.KEYS_KV.list({
           prefix: 'chat:'
@@ -3448,13 +3547,9 @@ export default {
         }
       );
 
-      return json(
-        {
-          conversations:
-            result
-        },
-        corsHeaders
-      );
+      const payload = { conversations: result };
+      runtimeCacheSet('admin:chat:all', payload);
+      return json(payload, corsHeaders);
     }
 
     // ─────────────────────────────────────────────────────────────────────
