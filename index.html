@@ -343,6 +343,261 @@
   .banner-preview .bp-sub    { font-size:9px;  color:rgba(255,255,255,.65); margin-top:6px; font-weight:700;
     white-space:pre-wrap; word-break:break-all; overflow-wrap:anywhere; }
 
+
+/* ════════════════════════════════════════════════════════
+   MODERN WHITE UI / MOBILE OVERRIDES
+   ════════════════════════════════════════════════════════ */
+:root{
+  --bg:#f5f7fb;
+  --surface:#ffffff;
+  --surface2:#f8fafc;
+  --surface3:#f1f5f9;
+  --border:#e7ebf2;
+  --accent:#4f46e5;
+  --accent2:#6366f1;
+  --green:#16a34a;
+  --red:#dc2626;
+  --orange:#d97706;
+  --text:#172033;
+  --text2:#718096;
+  --radius:18px;
+  --shadow-sm:0 2px 10px rgba(15,23,42,.05);
+  --shadow:0 10px 34px rgba(15,23,42,.08);
+  --shadow-lg:0 20px 60px rgba(15,23,42,.12);
+}
+html{background:var(--bg);scroll-behavior:smooth}
+body{
+  background:
+    radial-gradient(circle at top left,rgba(99,102,241,.08),transparent 30%),
+    linear-gradient(180deg,#fbfcff 0%,#f5f7fb 100%);
+  color:var(--text);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+button,input,select,textarea{font:inherit}
+button{touch-action:manipulation}
+svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.navbar{
+  background:rgba(255,255,255,.9)!important;
+  border-bottom:1px solid rgba(231,235,242,.9)!important;
+  box-shadow:0 8px 30px rgba(15,23,42,.05);
+  padding:14px clamp(14px,3vw,32px)!important;
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+}
+.navbar h1{color:#111827!important;font-weight:800;letter-spacing:-.02em}
+.navbar-user{
+  display:inline-flex;align-items:center;min-height:30px;padding:6px 10px;border-radius:999px;
+  background:#f1f5f9;color:#475569;font-size:12px;font-weight:700
+}
+.worker-url-display{display:none!important}
+.badge{
+  background:#eef2ff!important;color:#4f46e5!important;border:1px solid #e0e7ff;
+  padding:6px 10px!important
+}
+.btn{
+  min-height:40px;border-radius:12px!important;border:1px solid transparent!important;
+  box-shadow:var(--shadow-sm);transition:transform .18s,box-shadow .18s,background .18s,border-color .18s!important;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px
+}
+.btn:hover{opacity:1!important;transform:translateY(-1px);box-shadow:0 8px 24px rgba(15,23,42,.09)}
+.btn:active{transform:translateY(0);box-shadow:none}
+.btn svg{width:16px;height:16px}
+.btn-primary{background:#4f46e5!important;color:#fff!important}
+.btn-success{background:#16a34a!important;color:#fff!important}
+.btn-danger{background:#dc2626!important;color:#fff!important}
+.btn-warning{background:#f59e0b!important;color:#fff!important}
+.btn-info{background:#6366f1!important;color:#fff!important}
+.btn-soft,.btn-ghost{background:#fff!important;color:#475569!important;border-color:#e7ebf2!important}
+.btn-lg{min-height:46px;font-size:14px}
+.container{max-width:1380px!important;padding:26px clamp(12px,3vw,28px) 40px!important}
+.stats-grid{gap:14px!important}
+.stat-card{
+  background:rgba(255,255,255,.96)!important;border:1px solid #e9edf4!important;border-radius:18px!important;
+  padding:20px!important;box-shadow:var(--shadow-sm);transition:transform .18s,box-shadow .18s
+}
+.stat-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.stat-card .val{font-size:29px!important;color:#4f46e5}
+.toolbar{
+  background:rgba(255,255,255,.72);border:1px solid #edf0f5;border-radius:16px;padding:12px;
+  box-shadow:var(--shadow-sm);gap:10px
+}
+.toolbar input[type=text],.toolbar select,.form-group input,.form-group select,.form-group textarea{
+  background:#fff!important;border:1px solid #dfe5ee!important;color:var(--text)!important;border-radius:12px!important;
+  min-height:42px;box-shadow:inset 0 1px 2px rgba(15,23,42,.02)
+}
+.toolbar input:focus,.toolbar select:focus,.form-group input:focus,.form-group select:focus,.form-group textarea:focus{
+  border-color:#a5b4fc!important;box-shadow:0 0 0 4px rgba(79,70,229,.09)!important
+}
+.info-box,.warn-box{
+  background:#fff!important;border:1px solid #e7ebf2!important;color:#64748b!important;
+  border-radius:16px!important;box-shadow:var(--shadow-sm)
+}
+.info-box strong{color:#4f46e5!important}
+.table-wrap{
+  background:#fff!important;border:1px solid #e8ecf3!important;border-radius:18px!important;
+  box-shadow:var(--shadow);overflow:auto
+}
+table{min-width:960px}
+th{
+  background:#f8fafc!important;color:#64748b!important;border-bottom:1px solid #edf1f6;
+  padding:13px 15px!important
+}
+td{border-top:1px solid #edf1f6!important;padding:13px 15px!important}
+tr:hover td{background:#fafbff!important}
+.mono{color:#4f46e5!important}
+.dev-badge{background:#f8fafc!important;border-color:#e8ecf3!important;border-radius:10px!important}
+.modal-overlay{
+  background:rgba(15,23,42,.32)!important;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  padding:12px!important
+}
+.modal,.chat-modal-box{
+  background:#fff!important;border:1px solid #e8ecf3!important;border-radius:22px!important;
+  box-shadow:var(--shadow-lg)!important
+}
+.modal{padding:24px!important}
+.modal h2{color:#111827!important;font-size:20px}
+.modal .close{
+  width:36px;height:36px;border-radius:10px;background:#f8fafc;display:grid;place-items:center;
+  transition:.18s
+}
+.modal .close:hover{background:#eef2ff;color:#4f46e5}
+.key-section,.device-item,.perms-feature{background:#f8fafc!important;border-color:#e8ecf3!important;border-radius:14px!important}
+.key-preview{background:#eef2ff!important;border-color:#c7d2fe!important;color:#4f46e5!important;border-radius:12px!important}
+.key-mode-tab,.perms-tab{border-color:#e3e8f0!important;background:#fff!important;border-radius:10px!important}
+.key-mode-tab.active,.perms-tab.active{background:#4f46e5!important;border-color:#4f46e5!important;color:#fff!important}
+#login-screen{
+  min-height:100dvh!important;
+  padding:20px!important;
+  background:
+    radial-gradient(circle at 20% 10%,rgba(99,102,241,.10),transparent 28%),
+    radial-gradient(circle at 80% 90%,rgba(56,189,248,.08),transparent 25%),
+    #f7f9fc!important
+}
+.login-card{
+  width:min(440px,100%)!important;padding:30px!important;background:rgba(255,255,255,.96)!important;
+  border:1px solid #e7ebf2!important;border-radius:26px!important;box-shadow:0 28px 80px rgba(15,23,42,.12)!important
+}
+.login-brand{display:flex;gap:14px;align-items:center;margin-bottom:22px}
+.login-brand h1{color:#111827!important;font-size:25px;margin:0 0 3px}
+.login-brand p{color:#64748b!important;font-size:13px;margin:0}
+.brand-mark{
+  width:48px;height:48px;border-radius:15px;background:linear-gradient(135deg,#4f46e5,#818cf8);
+  color:#fff;display:grid;place-items:center;box-shadow:0 12px 30px rgba(79,70,229,.25)
+}
+.brand-mark svg{width:24px;height:24px}
+.auth-tabs{display:grid;grid-template-columns:1fr 1fr;gap:5px;background:#f1f5f9;padding:5px;border-radius:14px;margin-bottom:20px}
+.auth-tab{
+  border:0;background:transparent;color:#64748b;border-radius:10px;padding:10px;font-weight:700;cursor:pointer
+}
+.auth-tab.active{background:#fff;color:#4f46e5;box-shadow:var(--shadow-sm)}
+.input-icon-wrap{position:relative;display:flex;align-items:center}
+.input-icon-wrap>svg{position:absolute;left:13px;color:#94a3b8;width:18px;height:18px;z-index:1}
+.input-icon-wrap input{padding-left:42px!important;padding-right:72px!important}
+.input-action{
+  position:absolute;right:8px;border:0;background:#f8fafc;color:#64748b;border-radius:8px;padding:5px 8px;
+  font-size:11px;cursor:pointer
+}
+.field-hint{color:#94a3b8;font-size:11px;line-height:1.5;margin-top:6px}
+.optional{font-weight:500;color:#94a3b8}
+.auth-error{
+  margin-top:12px;padding:11px 12px;border-radius:12px;background:#fef2f2;color:#b91c1c;border:1px solid #fee2e2;
+  font-size:12px;line-height:1.5
+}
+.security-note{
+  display:flex;gap:9px;align-items:flex-start;margin-top:16px;padding:11px 12px;border-radius:12px;
+  background:#f8fafc;color:#64748b;font-size:11px;line-height:1.5
+}
+.security-note svg{width:16px;height:16px;flex:0 0 16px;color:#4f46e5;margin-top:1px}
+.worker-config{margin-top:18px;padding-top:16px;border-top:1px solid #edf1f6}
+.users-modal{width:min(700px,96vw)!important}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+.modal-head h2{margin-bottom:4px}
+.modal-head p{font-size:12px;color:#94a3b8}
+.users-list{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto}
+.user-row{
+  display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e8ecf3;border-radius:14px;background:#fbfcfe
+}
+.user-avatar{
+  width:40px;height:40px;border-radius:12px;background:#eef2ff;color:#4f46e5;display:grid;place-items:center;font-weight:800
+}
+.user-main{flex:1;min-width:0}
+.user-name{font-size:13px;font-weight:800;color:#1e293b}
+.user-meta{margin-top:2px;color:#94a3b8;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-actions{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.user-role{padding:5px 9px;border-radius:999px;background:#f1f5f9;color:#64748b;font-size:10px;font-weight:800}
+.user-role.admin{background:#eef2ff;color:#4f46e5}
+.self-tag{font-size:10px;color:#16a34a;font-weight:700}
+.empty-state{text-align:center;padding:30px;color:#94a3b8;font-size:12px}
+.empty-state.error{color:#dc2626}
+.chat-panel{
+  background:rgba(15,23,42,.28)!important;padding:10px!important;align-items:center!important;justify-content:center!important
+}
+.chat-modal-box{
+  width:min(1120px,100%)!important;height:min(86dvh,780px)!important;min-height:0!important;
+  overflow:hidden!important
+}
+.chat-header,.chat-toolbar,.chat-input-area,.chat-conv-header{
+  background:#fff!important;border-color:#edf1f6!important
+}
+.chat-layout{min-height:0!important}
+.chat-sidebar{width:280px!important;background:#fbfcfe;border-right:1px solid #edf1f6!important}
+.chat-mobile-back{display:none;border:0;background:#f1f5f9;color:#475569;border-radius:9px;padding:7px 10px;font-size:11px;font-weight:700;margin-bottom:7px}
+.chat-messages{background:#f8fafc!important;padding:18px!important}
+.chat-bubble{box-shadow:0 5px 18px rgba(15,23,42,.05);border:1px solid #edf1f6}
+.chat-msg.user .chat-bubble{background:#4f46e5!important;border:0!important}
+.chat-msg.admin .chat-bubble{background:#fff!important;color:#334155!important}
+.chat-input-area input{
+  background:#f8fafc!important;border:1px solid #e1e7ef!important;border-radius:13px!important;min-height:44px
+}
+.chat-input-area button{min-width:46px}
+.chat-profile-name{background:#f8fafc!important;border-color:#e1e7ef!important;color:#334155!important}
+.chat-avatar{border-color:#c7d2fe!important}
+.chat-avatar.admin{border-color:#fca5a5!important}
+.chat-avatar-wrap.admin::before{content:"";width:8px;height:8px;border-radius:50%;background:#22c55e;top:2px;left:27px;border:2px solid #fff}
+@media (max-width: 800px){
+  .navbar{gap:8px!important;flex-wrap:wrap}
+  .navbar h1{font-size:16px;min-width:0}
+  .navbar-user{order:3}
+  #users-nav-btn span,#chat-nav-btn span,#users-nav-btn .badge-unread-chat{display:none}
+  .navbar .btn{min-width:40px;padding:9px!important}
+  .toolbar{align-items:stretch}
+  .toolbar>*{width:100%}
+  .toolbar input[type=text]{min-width:0}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .chat-modal-box{
+    width:100%!important;height:100dvh!important;max-height:none!important;border-radius:18px!important
+  }
+  .chat-layout{display:block!important;position:relative}
+  .chat-layout > div:last-child{width:100%!important;height:100%!important;min-height:0}
+  .chat-sidebar{
+    position:absolute!important;inset:0!important;width:100%!important;z-index:4;display:flex;
+  }
+  .chat-sidebar.mobile-hidden{display:none!important}
+  .chat-main{width:100%!important;height:100%!important;display:flex!important;flex-direction:column!important}
+  .chat-mobile-back{display:inline-flex!important}.chat-main .chat-conv-header{padding-left:12px!important}
+  .chat-messages{padding:12px!important}
+  .chat-msg{max-width:88%!important}
+  .chat-bubble{font-size:13px!important}
+  .chat-header{padding:10px 12px!important;min-height:56px}
+  .chat-header h3{font-size:14px}
+  .chat-device-id{max-width:45vw}
+  .chat-input-area{padding:9px!important;gap:7px!important;padding-bottom:max(9px,env(safe-area-inset-bottom))!important}
+  .chat-input-area input{min-width:0}
+  .user-row{align-items:flex-start}
+  .user-actions{flex-direction:column;align-items:flex-end}
+}
+@media (max-width: 520px){
+  #login-screen{padding:10px!important}
+  .login-card{padding:20px!important;border-radius:20px!important}
+  .stats-grid{gap:10px}
+  .stat-card{padding:15px!important}
+  .stat-card .val{font-size:24px!important}
+  .modal{padding:18px!important;border-radius:18px!important}
+  .form-row{grid-template-columns:1fr!important}
+  .actions{gap:5px}
+}
+
 </style>
 </head>
 <body>
@@ -350,37 +605,76 @@
 <!-- ══ LOGIN ══ -->
 <div id="login-screen">
   <div class="login-card">
-    <h1>🔐 Key Manager</h1>
-    <p>Đăng nhập để quản lý key LQ Mod</p>
-
-    <div class="warn-box" style="margin-bottom:20px">
-      ⚡ Mọi thao tác (tạo/ban/xóa/gia hạn) đều gọi thẳng lên <strong>Cloudflare Worker</strong> — không cần export thủ công.
+    <div class="login-brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4.5 6.2v5.4c0 4.4 3 8.4 7.5 9.9 4.5-1.5 7.5-5.5 7.5-9.9V6.2L12 3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+      <div>
+        <h1>Key Manager</h1>
+        <p>Quản lý key LQ Mod an toàn trên Cloudflare</p>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label>Tên đăng nhập</label>
-      <input type="text" id="login-user" placeholder="admin" autocomplete="username">
-    </div>
-    <div class="form-group">
-      <label>Mật khẩu</label>
-      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="auth-tab-login" onclick="switchAuthMode('login')">Đăng nhập</button>
+      <button class="auth-tab" id="auth-tab-register" onclick="switchAuthMode('register')">Tạo tài khoản</button>
     </div>
 
-    <hr style="border-color:var(--border);margin:20px 0">
-
-    <div class="form-group">
-      <label>🌐 Cloudflare Worker URL <span style="color:var(--red)">*</span></label>
-      <input type="text" id="login-worker-url"
-             placeholder="https://your-worker.your-name.workers.dev"
-             autocomplete="off">
+    <div class="auth-panel" id="auth-login-panel">
+      <div class="form-group">
+        <label>Tên đăng nhập</label>
+        <div class="input-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+          <input type="text" id="login-user" placeholder="Tên tài khoản" autocomplete="username">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Mật khẩu</label>
+        <div class="input-icon-wrap">
+          <svg viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3"/></svg>
+          <input type="password" id="login-pass" placeholder="Mật khẩu" autocomplete="current-password">
+          <button class="input-action" type="button" onclick="togglePassword('login-pass', this)" aria-label="Hiện mật khẩu">Hiện</button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-lg" onclick="doLogin()" id="login-btn">Đăng nhập</button>
     </div>
-    <div class="form-group">
-      <label>🔑 Admin Token <span style="color:var(--red)">*</span></label>
-      <input type="password" id="login-admin-token" placeholder="your-secret-admin-token-here" autocomplete="off">
+
+    <div class="auth-panel" id="auth-register-panel" style="display:none">
+      <div class="form-group">
+        <label>Tên đăng nhập</label>
+        <div class="input-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+          <input type="text" id="register-user" placeholder="Từ 3 đến 32 ký tự" autocomplete="username">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Mật khẩu</label>
+        <div class="input-icon-wrap">
+          <svg viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3"/></svg>
+          <input type="password" id="register-pass" placeholder="Ít nhất 8 ký tự" autocomplete="new-password">
+          <button class="input-action" type="button" onclick="togglePassword('register-pass', this)" aria-label="Hiện mật khẩu">Hiện</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Mã cấp quyền quản trị <span class="optional">không bắt buộc</span></label>
+        <input type="password" id="register-setup-code" placeholder="Chỉ dùng khi thiết lập admin đầu tiên" autocomplete="off">
+        <div class="field-hint">Mã này phải được cấu hình trong Cloudflare Worker và không nằm trong file HTML.</div>
+      </div>
+      <button class="btn btn-primary btn-lg" onclick="doRegister()" id="register-btn">Tạo tài khoản</button>
     </div>
 
-    <div id="login-err" style="color:var(--red);font-size:12px;margin-bottom:12px;display:none"></div>
-    <button class="btn btn-primary" style="width:100%" onclick="doLogin()" id="login-btn">Đăng nhập & Kiểm tra kết nối</button>
+    <div class="form-group worker-config">
+      <label>Cloudflare Worker URL</label>
+      <div class="input-icon-wrap">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+        <input type="url" id="login-worker-url" placeholder="https://your-worker.workers.dev" autocomplete="url">
+      </div>
+      <div class="field-hint">Địa chỉ Worker được lưu trên máy để lần sau tự điền.</div>
+    </div>
+
+    <div id="login-err" class="auth-error" style="display:none"></div>
+    <div class="security-note">
+      <svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.2v5.4c0 4.4 3 8.4 7.5 9.9 4.5-1.5 7.5-5.5 7.5-9.9V6.2L12 3Z"/><path d="M9 12h.01M12 12h.01M15 12h.01"/></svg>
+      <span>Thông tin tài khoản được xác thực ở Cloudflare Worker. Không lưu tài khoản admin/mật khẩu trong HTML.</span>
+    </div>
   </div>
 </div>
 
@@ -388,11 +682,12 @@
 <div id="app">
   <div class="navbar">
     <h1>🔑 Key Manager — LQ Mod</h1>
-    <span class="badge" id="admin-badge">ADMIN</span>
+    <span class="badge" id="admin-badge">ADMIN</span><span class="navbar-user" id="current-user-name"></span>
     <span class="worker-url-display" id="worker-url-badge"></span>
-    <button class="btn btn-ghost btn-sm" onclick="doLogout()">Đăng xuất</button>
+    <button class="btn btn-soft btn-sm" onclick="openUsersModal()" id="users-nav-btn"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Tài khoản</span></button><button class="btn btn-ghost btn-sm" onclick="doLogout()"><svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-6"/></svg><span>Đăng xuất</span></button>
     <button class="btn btn-info btn-sm" onclick="openChatPanel()" id="chat-nav-btn" style="position:relative">
-      💬 Chat
+      <svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 8.7 8.7 0 0 1-3.6-.9L3 20l1.6-4.9a8.4 8.4 0 1 1 16.4-3.6Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>
+      <span>Chat</span>
       <span id="chat-nav-badge" class="badge-unread-chat" style="display:none">0</span>
     </button>
   </div>
@@ -410,8 +705,8 @@
 
     <!-- Toolbar -->
     <div class="toolbar">
-      <button class="btn btn-success" onclick="openCreateModal()">+ Tạo key mới</button>
-      <button class="btn btn-ghost btn-sm" onclick="loadAllKeys()">🔄 Làm mới</button>
+      <button class="btn btn-primary" onclick="openCreateModal()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>Tạo key mới</span></button>
+      <button class="btn btn-soft btn-sm" onclick="loadAllKeys()"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5.3"/><path d="M20 5v6h-6"/></svg><span>Làm mới</span></button>
       <input type="text" id="search-box" placeholder="🔍 Tìm key, ghi chú, role..." oninput="filterTable()">
       <select id="filter-status" onchange="filterTable()">
         <option value="">Tất cả trạng thái</option>
@@ -768,6 +1063,7 @@
         <div id="chat-device-header" class="chat-conv-header" style="display:none">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
             <div style="min-width:0;flex:1">
+              <button class="chat-mobile-back" type="button" onclick="document.getElementById('chat-sidebar')?.classList.remove('mobile-hidden')" aria-label="Quay lại danh sách">← Danh sách</button>
               <div class="chat-conv-name" id="chat-current-name">—</div>
               <div class="chat-conv-sub" id="chat-current-device"></div>
               <div class="chat-conv-sub" id="chat-current-key"></div>
@@ -837,125 +1133,312 @@
   </div>
 </div>
 
+<!-- ══ MODAL: USERS ══ -->
+<div class="modal-overlay" id="users-modal" style="display:none">
+  <div class="modal users-modal">
+    <button class="close" onclick="closeModal('users-modal')">✕</button>
+    <div class="modal-head">
+      <div><h2>Tài khoản quản trị</h2><p>Cấp hoặc hạ quyền Admin cho các tài khoản đã đăng ký.</p></div>
+      <button class="btn btn-soft btn-sm" onclick="loadUsers()">Làm mới</button>
+    </div>
+    <div id="users-list" class="users-list"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
 // ════════════════════════════════════════════════════════
-//  CONFIG
+//  CONFIG / AUTH
 // ════════════════════════════════════════════════════════
 const CONFIG = {
-  adminUser: 'admin',
-  adminPass: 'lqmod@2026',
+  defaultWorkerUrl: ''
 };
 
-// ── State ──────────────────────────────────────────────
 let WORKER_URL  = '';
-let ADMIN_TOKEN = '';
+let AUTH_TOKEN  = '';
+let CURRENT_USER = null;
 let keys        = [];
 let filteredKeys = [];
 let renewingKey = null;
-let keyMode     = 'auto';   // 'auto' | 'custom'
+let keyMode     = 'auto';
 let pendingAutoKey = '';
 
-// ════════════════════════════════════════════════════════
-//  WORKER API HELPERS
-// ════════════════════════════════════════════════════════
+function authHeaders(json = false) {
+  const headers = {};
+  if (json) headers['Content-Type'] = 'application/json';
+  if (AUTH_TOKEN) headers['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+  return headers;
+}
+
 async function apiGet(path) {
-  const r = await fetch(WORKER_URL + path, { headers: { 'X-Admin-Token': ADMIN_TOKEN } });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  const r = await fetch(WORKER_URL + path, {
+    headers: authHeaders(false),
+    cache: 'no-store'
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    clearAuth();
+    throw new Error(data.error || 'Phiên đăng nhập đã hết hạn.');
+  }
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
 }
 
 async function apiPost(path, body) {
   const r = await fetch(WORKER_URL + path, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': ADMIN_TOKEN },
+    headers: authHeaders(true),
     body: JSON.stringify(body),
     cache: 'no-store'
   });
-
   const data = await r.json().catch(() => ({}));
-
-  if (!r.ok) {
-    throw new Error(data.error || `HTTP ${r.status}`);
+  if (r.status === 401) {
+    clearAuth();
+    throw new Error(data.error || 'Phiên đăng nhập đã hết hạn.');
   }
-
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
   return data;
 }
 
-// ════════════════════════════════════════════════════════
-//  LOGIN / LOGOUT
-// ════════════════════════════════════════════════════════
-function doLogin() {
-  const u   = document.getElementById('login-user').value.trim();
-  const p   = document.getElementById('login-pass').value;
+function clearAuth() {
+  AUTH_TOKEN = '';
+  CURRENT_USER = null;
+  localStorage.removeItem('lq_auth');
+}
+
+function saveAuth() {
+  localStorage.setItem('lq_auth', JSON.stringify({
+    url: WORKER_URL,
+    token: AUTH_TOKEN,
+    savedAt: Date.now()
+  }));
+}
+
+function switchAuthMode(mode) {
+  const isLogin = mode === 'login';
+  document.getElementById('auth-login-panel').style.display = isLogin ? 'block' : 'none';
+  document.getElementById('auth-register-panel').style.display = isLogin ? 'none' : 'block';
+  document.getElementById('auth-tab-login').classList.toggle('active', isLogin);
+  document.getElementById('auth-tab-register').classList.toggle('active', !isLogin);
+  document.getElementById('login-err').style.display = 'none';
+}
+
+function togglePassword(id, button) {
+  const input = document.getElementById(id);
+  const visible = input.type === 'text';
+  input.type = visible ? 'password' : 'text';
+  button.textContent = visible ? 'Hiện' : 'Ẩn';
+}
+
+function setAuthError(message) {
+  const el = document.getElementById('login-err');
+  el.textContent = '⚠ ' + message;
+  el.style.display = 'block';
+}
+
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
   const url = document.getElementById('login-worker-url').value.trim().replace(/\/$/, '');
-  const tok = document.getElementById('login-admin-token').value.trim();
   const btn = document.getElementById('login-btn');
-  const err = document.getElementById('login-err');
 
-  err.style.display = 'none';
-  if (u !== CONFIG.adminUser || p !== CONFIG.adminPass) {
-    err.textContent = '❌ Sai tên đăng nhập hoặc mật khẩu.';
-    err.style.display = 'block'; return;
-  }
-  if (!url || !tok) {
-    err.textContent = '❌ Vui lòng nhập Worker URL và Admin Token.';
-    err.style.display = 'block'; return;
+  setAuthError('');
+  document.getElementById('login-err').style.display = 'none';
+
+  if (!u || !p || !url) {
+    setAuthError('Vui lòng nhập đầy đủ tài khoản, mật khẩu và Worker URL.');
+    return;
   }
 
-  WORKER_URL  = url;
-  ADMIN_TOKEN = tok;
-
+  WORKER_URL = url;
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Đang kiểm tra kết nối...';
+  btn.innerHTML = '<span class="spinner"></span>Đang đăng nhập...';
 
-  fetch(WORKER_URL + '/api/admin/list', { headers: { 'X-Admin-Token': ADMIN_TOKEN } })
-  .then(async r => {
-    btn.disabled = false;
-    btn.textContent = 'Đăng nhập & Kiểm tra kết nối';
-    if (r.status === 401) {
-      err.textContent = '❌ Admin Token sai! Kiểm tra lại trong Cloudflare.';
-      err.style.display = 'block'; return;
+  try {
+    const r = await fetch(WORKER_URL + '/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username: u, password: p }),
+      cache: 'no-store'
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Đăng nhập thất bại.');
+
+    AUTH_TOKEN = data.token;
+    CURRENT_USER = data.user;
+    saveAuth();
+
+    if (CURRENT_USER.role !== 'admin') {
+      clearAuth();
+      throw new Error('Tài khoản chưa được cấp quyền Admin.');
     }
-    if (!r.ok && r.status !== 404) {
-      err.textContent = `❌ Không kết nối được Worker (HTTP ${r.status}).`;
-      err.style.display = 'block'; return;
-    }
-    sessionStorage.setItem('lq_auth', JSON.stringify({ url, tok }));
     showApp();
-  })
-  .catch(() => {
+  } catch (e) {
+    setAuthError(e.message || 'Không thể đăng nhập.');
+  } finally {
     btn.disabled = false;
-    btn.textContent = 'Đăng nhập & Kiểm tra kết nối';
-    err.textContent = '❌ Không kết nối được Worker. Kiểm tra URL và CORS.';
-    err.style.display = 'block';
-  });
+    btn.textContent = 'Đăng nhập';
+  }
+}
+
+async function doRegister() {
+  const u = document.getElementById('register-user').value.trim();
+  const p = document.getElementById('register-pass').value;
+  const setupCode = document.getElementById('register-setup-code').value.trim();
+  const url = document.getElementById('login-worker-url').value.trim().replace(/\/$/, '');
+  const btn = document.getElementById('register-btn');
+
+  document.getElementById('login-err').style.display = 'none';
+
+  if (!u || !p || !url) {
+    setAuthError('Vui lòng nhập đầy đủ thông tin tài khoản và Worker URL.');
+    return;
+  }
+  if (p.length < 8) {
+    setAuthError('Mật khẩu phải có ít nhất 8 ký tự.');
+    return;
+  }
+
+  WORKER_URL = url;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Đang tạo tài khoản...';
+
+  try {
+    const r = await fetch(WORKER_URL + '/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username: u, password: p, setupCode }),
+      cache: 'no-store'
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'Không tạo được tài khoản.');
+
+    AUTH_TOKEN = data.token;
+    CURRENT_USER = data.user;
+    saveAuth();
+
+    if (CURRENT_USER.role !== 'admin') {
+      clearAuth();
+      switchAuthMode('login');
+      setAuthError('Đăng ký thành công. Tài khoản đang là Member; hãy nhờ Admin cấp quyền Admin rồi đăng nhập lại.');
+      return;
+    }
+
+    showApp();
+  } catch (e) {
+    setAuthError(e.message || 'Không thể tạo tài khoản.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Tạo tài khoản';
+  }
 }
 
 function doLogout() {
-  sessionStorage.removeItem('lq_auth');
+  clearAuth();
   location.reload();
 }
 
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  const badge = document.getElementById('admin-badge');
+  badge.textContent = 'ADMIN';
+  const name = document.getElementById('current-user-name');
+  if (name) name.textContent = CURRENT_USER?.username || 'Admin';
   document.getElementById('worker-url-badge').textContent = WORKER_URL;
   loadAllKeys();
 }
 
-document.getElementById('login-pass').addEventListener('keyup', e => { if (e.key === 'Enter') doLogin(); });
-document.getElementById('login-admin-token').addEventListener('keyup', e => { if (e.key === 'Enter') doLogin(); });
+async function restoreSession() {
+  const raw = localStorage.getItem('lq_auth');
+  if (!raw) {
+    const savedUrl = localStorage.getItem('lq_worker_url') || CONFIG.defaultWorkerUrl;
+    if (savedUrl) document.getElementById('login-worker-url').value = savedUrl;
+    return;
+  }
 
-const _saved = sessionStorage.getItem('lq_auth');
-if (_saved) {
   try {
-    const s = JSON.parse(_saved);
-    WORKER_URL  = s.url;
-    ADMIN_TOKEN = s.tok;
+    const s = JSON.parse(raw);
+    if (!s.url || !s.token) throw new Error('invalid');
+    WORKER_URL = s.url;
+    AUTH_TOKEN = s.token;
+    document.getElementById('login-worker-url').value = WORKER_URL;
+
+    const data = await apiGet('/api/auth/me');
+    CURRENT_USER = data.user;
+    if (CURRENT_USER.role !== 'admin') {
+      clearAuth();
+      throw new Error('member');
+    }
     showApp();
-  } catch {}
+  } catch {
+    clearAuth();
+    const savedUrl = localStorage.getItem('lq_worker_url') || CONFIG.defaultWorkerUrl;
+    if (savedUrl) document.getElementById('login-worker-url').value = savedUrl;
+  }
+}
+
+document.getElementById('login-pass').addEventListener('keyup', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('register-pass').addEventListener('keyup', e => { if (e.key === 'Enter') doRegister(); });
+document.getElementById('login-worker-url').addEventListener('change', e => {
+  const url = e.target.value.trim().replace(/\/$/, '');
+  if (url) localStorage.setItem('lq_worker_url', url);
+});
+
+restoreSession();
+
+// ════════════════════════════════════════════════════════
+//  USER MANAGEMENT
+// ════════════════════════════════════════════════════════
+async function openUsersModal() {
+  const modal = document.getElementById('users-modal');
+  modal.style.display = 'flex';
+  await loadUsers();
+}
+async function loadUsers() {
+  const el = document.getElementById('users-list');
+  el.innerHTML = '<div class="empty-state"><span class="spinner"></span> Đang tải tài khoản...</div>';
+  try {
+    const data = await apiGet('/api/admin/users');
+    if (!data.users?.length) {
+      el.innerHTML = '<div class="empty-state">Chưa có tài khoản nào.</div>';
+      return;
+    }
+    el.innerHTML = data.users.map(u => `
+      <div class="user-row">
+        <div class="user-avatar">${escapeHtml((u.username || '?').slice(0,1).toUpperCase())}</div>
+        <div class="user-main">
+          <div class="user-name">${escapeHtml(u.username)}</div>
+          <div class="user-meta">Tạo: ${u.createdAt ? new Date(u.createdAt).toLocaleString('vi-VN') : '—'} · Đăng nhập: ${u.lastLogin ? new Date(u.lastLogin).toLocaleString('vi-VN') : 'Chưa đăng nhập'}</div>
+        </div>
+        <div class="user-actions">
+          <span class="user-role ${u.role === 'admin' ? 'admin' : ''}">${u.role === 'admin' ? 'Admin' : 'Member'}</span>
+          ${u.username === CURRENT_USER?.username
+            ? '<span class="self-tag">Bạn</span>'
+            : `<button class="btn btn-soft btn-sm" onclick="changeUserRole('${escapeJs(u.username)}','${u.role === 'admin' ? 'member' : 'admin'}')">${u.role === 'admin' ? 'Hạ Member' : 'Cấp Admin'}</button>`}
+        </div>
+      </div>`).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state error">${escapeHtml(e.message)}</div>`;
+  }
+}
+async function changeUserRole(username, role) {
+  const action = role === 'admin' ? 'cấp Admin cho' : 'hạ quyền của';
+  if (!confirm(`Xác nhận ${action} tài khoản "${username}"?`)) return;
+  try {
+    await apiPost('/api/admin/users/role', { username, role });
+    showToast(role === 'admin' ? '✅ Đã cấp Admin' : '✅ Đã hạ xuống Member', 'ok');
+    loadUsers();
+  } catch (e) {
+    showToast('❌ ' + e.message, 'err');
+  }
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeJs(s) {
+  return String(s ?? '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 }
 
 // ════════════════════════════════════════════════════════
@@ -1882,7 +2365,7 @@ async function klLoadLog(deviceId) {
     el.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px">Đang tải...</div>';
   try {
     const r = await fetch(WORKER_URL + '/api/admin/keylog?device=' + encodeURIComponent(deviceId), {
-      headers: { 'X-Admin-Token': ADMIN_TOKEN }
+      headers: authHeaders(false)
     });
     const data = await r.json();
     klCurrentLines = (data.lines || []).slice().reverse(); // mới nhất lên đầu
@@ -2106,6 +2589,7 @@ function applyChatProfiles(data) {
 
 function openChatPanel() {
   document.getElementById('chat-panel').classList.add('open');
+  document.getElementById('chat-sidebar')?.classList.remove('mobile-hidden');
   // Hiển thị ngay lập tức từ dữ liệu đã có (keys + chatConversations)
   renderConversationList();
   refreshChatConversations();
@@ -2115,6 +2599,7 @@ function openChatPanel() {
 
 function closeChatPanel() {
   document.getElementById('chat-panel').classList.remove('open');
+  document.getElementById('chat-sidebar')?.classList.remove('mobile-hidden');
   stopChatRealtime();
   hideCtxMenu();
 }
@@ -2362,6 +2847,7 @@ function renderConversationList() {
 // ── Open a specific conversation ───────────────────────────────────────────
 async function openConversation(deviceID, key) {
   chatCurrentDevice = deviceID;
+  document.getElementById('chat-sidebar')?.classList.add('mobile-hidden');
   chatCurrentKey    = key;
 
   // Find device name
