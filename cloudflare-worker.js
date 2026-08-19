@@ -110,7 +110,7 @@ async function derivePasswordHash(password, saltBytes) {
     {
       name: 'PBKDF2',
       salt: saltBytes,
-      iterations: 150000,
+      iterations: 100000,
       hash: 'SHA-256'
     },
     baseKey,
