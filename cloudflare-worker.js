@@ -60,6 +60,182 @@ function sanitizeChatProfile(profile, fallbackName, fallbackAvatar) {
   };
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTH — account registration/login/session. Secrets stay in Worker env.
+// Required Worker secrets:
+//   AUTH_SECRET             random long secret used to sign sessions
+//   BOOTSTRAP_ADMIN_SECRET  one-time/setup code used to create an Admin
+// ═══════════════════════════════════════════════════════════════════════════
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+function b64urlEncode(value) {
+  const bytes = typeof value === 'string'
+    ? new TextEncoder().encode(value)
+    : value;
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function b64urlDecode(value) {
+  const raw = String(value).replace(/-/g, '+').replace(/_/g, '/');
+  const padded = raw + '='.repeat((4 - (raw.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
+}
+
+function publicUsername(username) {
+  return String(username || '').trim();
+}
+
+async function derivePasswordHash(password, saltBytes) {
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: saltBytes,
+      iterations: 150000,
+      hash: 'SHA-256'
+    },
+    baseKey,
+    256
+  );
+  return b64urlEncode(new Uint8Array(bits));
+}
+
+async function verifyPassword(password, saltB64, expectedHash) {
+  const salt = b64urlDecode(saltB64);
+  const actual = await derivePasswordHash(password, salt);
+  return timingSafeEqual(actual, expectedHash);
+}
+
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function signSession(payload, secret) {
+  const data = b64urlEncode(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = new Uint8Array(await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(data)
+  ));
+  return data + '.' + b64urlEncode(signature);
+}
+
+async function verifySessionToken(token, secret) {
+  try {
+    const [data, sig] = String(token || '').split('.');
+    if (!data || !sig) return null;
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const ok = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      b64urlDecode(sig),
+      new TextEncoder().encode(data)
+    );
+    if (!ok) return null;
+
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(data)));
+    if (!payload.u || !payload.exp || payload.exp <= Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function getBearerToken(request) {
+  const auth = request.headers.get('Authorization') || '';
+  return auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+}
+
+async function getSessionUser(request, env) {
+  const token = getBearerToken(request);
+  if (!token || !env.AUTH_SECRET) return null;
+  const payload = await verifySessionToken(token, env.AUTH_SECRET);
+  if (!payload) return null;
+
+  const raw = await env.KEYS_KV.get(`user:${payload.u}`);
+  if (!raw) return null;
+  try {
+    const user = JSON.parse(raw);
+    if (user.status !== 'active') return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+async function requireAdmin(request, env) {
+  const user = await getSessionUser(request, env);
+  if (user && user.role === 'admin') return null;
+
+  return json({ error: 'Unauthorized' }, {
+    'Content-Type': 'application/json; charset=utf-8'
+  }, 401);
+}
+
+async function createSessionToken(user, env) {
+  const now = Math.floor(Date.now() / 1000);
+  return signSession({
+    u: user.username,
+    iat: now,
+    exp: now + SESSION_TTL_SECONDS,
+    jti: crypto.randomUUID()
+  }, env.AUTH_SECRET);
+}
+
+function safeUser(user) {
+  return {
+    username: user.username,
+    role: user.role,
+    status: user.status,
+    createdAt: user.createdAt,
+    lastLogin: user.lastLogin || null
+  };
+}
+
+function validUsername(username) {
+  return /^[a-zA-Z0-9._-]{3,32}$/.test(username);
+}
+
+function validPassword(password) {
+  return typeof password === 'string' && password.length >= 8 && password.length <= 128;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -68,13 +244,143 @@ export default {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers':
-        'Content-Type, X-Auth-Key, X-Device-ID, X-Admin-Token',
+        'Content-Type, X-Auth-Key, X-Device-ID, Authorization',
     };
 
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: corsHeaders
       });
+    }
+
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ACCOUNT AUTH
+    // ══════════════════════════════════════════════════════════════════════
+
+    if (url.pathname === '/api/auth/register' && request.method === 'POST') {
+      if (!env.AUTH_SECRET) {
+        return json({ error: 'Worker thiếu AUTH_SECRET' }, corsHeaders, 500);
+      }
+
+      let body;
+      try { body = await request.json(); }
+      catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+
+      const username = normalizeUsername(body.username);
+      const password = String(body.password || '');
+      const setupCode = String(body.setupCode || '');
+
+      if (!validUsername(username)) {
+        return json({ error: 'Tên tài khoản phải 3–32 ký tự, chỉ gồm chữ, số, dấu . _ -' }, corsHeaders, 400);
+      }
+      if (!validPassword(password)) {
+        return json({ error: 'Mật khẩu phải từ 8 đến 128 ký tự' }, corsHeaders, 400);
+      }
+
+      const exists = await env.KEYS_KV.get(`user:${username}`);
+      if (exists) {
+        return json({ error: 'Tên tài khoản đã tồn tại' }, corsHeaders, 409);
+      }
+
+      let role = 'member';
+      if (env.BOOTSTRAP_ADMIN_SECRET && setupCode && setupCode === env.BOOTSTRAP_ADMIN_SECRET) {
+        role = 'admin';
+      }
+
+      const salt = crypto.getRandomValues(new Uint8Array(16));
+      const passwordHash = await derivePasswordHash(password, salt);
+      const now = new Date().toISOString();
+
+      const user = {
+        username,
+        role,
+        status: 'active',
+        passwordHash,
+        salt: b64urlEncode(salt),
+        createdAt: now,
+        lastLogin: now
+      };
+
+      await env.KEYS_KV.put(`user:${username}`, JSON.stringify(user));
+      const token = await createSessionToken(user, env);
+
+      return json({ success: true, token, user: safeUser(user) }, corsHeaders);
+    }
+
+    if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+      if (!env.AUTH_SECRET) {
+        return json({ error: 'Worker thiếu AUTH_SECRET' }, corsHeaders, 500);
+      }
+
+      let body;
+      try { body = await request.json(); }
+      catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+
+      const username = normalizeUsername(body.username);
+      const password = String(body.password || '');
+      const raw = await env.KEYS_KV.get(`user:${username}`);
+
+      // Backward compatibility for the original admin account.
+      // The legacy username/password are NOT embedded in HTML or Worker source;
+      // configure them as Cloudflare Secrets: LEGACY_ADMIN_USERNAME / LEGACY_ADMIN_PASSWORD.
+      // On the first successful legacy login, the account is migrated into KV
+      // using the same PBKDF2 password hashing as all new accounts.
+      if (!raw &&
+          env.LEGACY_ADMIN_USERNAME &&
+          env.LEGACY_ADMIN_PASSWORD &&
+          username === normalizeUsername(env.LEGACY_ADMIN_USERNAME) &&
+          password === String(env.LEGACY_ADMIN_PASSWORD)) {
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const passwordHash = await derivePasswordHash(password, salt);
+        const now = new Date().toISOString();
+
+        const migratedUser = {
+          username,
+          role: 'admin',
+          status: 'active',
+          passwordHash,
+          salt: b64urlEncode(salt),
+          createdAt: now,
+          lastLogin: now,
+          migratedFromLegacy: true
+        };
+
+        await env.KEYS_KV.put(`user:${username}`, JSON.stringify(migratedUser));
+        const token = await createSessionToken(migratedUser, env);
+        return json({
+          success: true,
+          token,
+          user: safeUser(migratedUser),
+          migrated: true
+        }, corsHeaders);
+      }
+
+      if (!raw) {
+        return json({ error: 'Sai tên đăng nhập hoặc mật khẩu' }, corsHeaders, 401);
+      }
+
+      let user;
+      try { user = JSON.parse(raw); } catch {
+        return json({ error: 'Tài khoản bị lỗi dữ liệu' }, corsHeaders, 500);
+      }
+
+      if (user.status !== 'active' || !user.salt || !user.passwordHash ||
+          !(await verifyPassword(password, user.salt, user.passwordHash))) {
+        return json({ error: 'Sai tên đăng nhập hoặc mật khẩu' }, corsHeaders, 401);
+      }
+
+      user.lastLogin = new Date().toISOString();
+      await env.KEYS_KV.put(`user:${username}`, JSON.stringify(user));
+
+      const token = await createSessionToken(user, env);
+      return json({ success: true, token, user: safeUser(user) }, corsHeaders);
+    }
+
+    if (url.pathname === '/api/auth/me' && request.method === 'GET') {
+      const user = await getSessionUser(request, env);
+      if (!user) return json({ error: 'Session expired' }, corsHeaders, 401);
+      return json({ user: safeUser(user) }, corsHeaders);
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -231,22 +537,73 @@ export default {
       );
     }
 
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ADMIN ACCOUNT MANAGEMENT
+    // ══════════════════════════════════════════════════════════════════════
+
+    if (url.pathname === '/api/admin/users' && request.method === 'GET') {
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
+
+      const listed = await env.KEYS_KV.list({ prefix: 'user:' });
+      const users = [];
+
+      for (const item of listed.keys) {
+        const raw = await env.KEYS_KV.get(item.name);
+        if (!raw) continue;
+        try {
+          const user = JSON.parse(raw);
+          users.push(safeUser(user));
+        } catch {}
+      }
+
+      users.sort((a, b) => String(a.username).localeCompare(String(b.username)));
+      return json({ users }, corsHeaders);
+    }
+
+    if (url.pathname === '/api/admin/users/role' && request.method === 'POST') {
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
+
+      let body;
+      try { body = await request.json(); }
+      catch { return json({ error: 'Invalid JSON' }, corsHeaders, 400); }
+
+      const username = normalizeUsername(body.username);
+      const role = String(body.role || '');
+
+      if (!validUsername(username) || !['admin', 'member'].includes(role)) {
+        return json({ error: 'Invalid params' }, corsHeaders, 400);
+      }
+
+      const current = await getSessionUser(request, env);
+      if (current && current.username === username && role !== 'admin') {
+        return json({ error: 'Không thể tự hạ quyền tài khoản đang đăng nhập' }, corsHeaders, 400);
+      }
+
+      const raw = await env.KEYS_KV.get(`user:${username}`);
+      if (!raw) return json({ error: 'Tài khoản không tồn tại' }, corsHeaders, 404);
+
+      let user;
+      try { user = JSON.parse(raw); } catch {
+        return json({ error: 'Dữ liệu tài khoản không hợp lệ' }, corsHeaders, 500);
+      }
+
+      user.role = role;
+      await env.KEYS_KV.put(`user:${username}`, JSON.stringify(user));
+
+      return json({ success: true, user: safeUser(user) }, corsHeaders);
+    }
+
     // ══════════════════════════════════════════════════════════════════════
     // ADMIN KEY MANAGEMENT
     // ══════════════════════════════════════════════════════════════════════
 
     // GET /api/admin/list
     if (url.pathname === '/api/admin/list') {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const listed =
         await env.KEYS_KV.list({
@@ -428,16 +785,8 @@ export default {
       url.pathname === '/api/admin/create' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const body =
         await request.json();
@@ -508,16 +857,8 @@ export default {
       url.pathname === '/api/admin/ban' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { key } =
         await request.json();
@@ -556,16 +897,8 @@ export default {
       url.pathname === '/api/admin/unban' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { key } =
         await request.json();
@@ -611,16 +944,8 @@ export default {
       url.pathname === '/api/admin/delete' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { key } =
         await request.json();
@@ -640,16 +965,8 @@ export default {
       url.pathname === '/api/admin/renew' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { key, addDays } =
         await request.json();
@@ -706,16 +1023,8 @@ export default {
       url.pathname === '/api/admin/setrole' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { key, role } =
         await request.json();
@@ -769,16 +1078,8 @@ export default {
       url.pathname === '/api/admin/setnote' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { key, note } =
         await request.json();
@@ -825,16 +1126,8 @@ export default {
       url.pathname === '/api/admin/setdevicename' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const {
         key,
@@ -904,16 +1197,8 @@ export default {
       url.pathname === '/api/admin/setdeviceperms' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const {
         key,
@@ -989,16 +1274,8 @@ export default {
       url.pathname === '/api/admin/setkeybanner' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const {
         key,
@@ -1116,16 +1393,8 @@ export default {
       url.pathname === '/api/admin/setconfig' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const body =
         await request.json();
@@ -1243,16 +1512,8 @@ export default {
     if (
       url.pathname === '/api/admin/keylog'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const deviceID =
         url.searchParams.get('device');
@@ -1315,16 +1576,8 @@ export default {
       url.pathname === '/api/admin/clearlog' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get('X-Admin-Token');
-
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json(
-          { error: 'Unauthorized' },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const { deviceID } =
         await request.json();
@@ -1926,23 +2179,8 @@ export default {
       url.pathname === '/api/admin/chat/messages' &&
       request.method === 'GET'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const deviceID =
         url.searchParams.get(
@@ -2351,23 +2589,8 @@ export default {
         '/api/admin/chat/reply' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
 
@@ -2544,23 +2767,8 @@ export default {
         '/api/admin/chat/sendtokey' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
 
@@ -2738,23 +2946,8 @@ export default {
         '/api/admin/chat/broadcast' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
 
@@ -2933,23 +3126,8 @@ export default {
         '/api/admin/chat/unread' &&
       request.method === 'GET'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const listed =
         await env.KEYS_KV.list({
@@ -3065,23 +3243,8 @@ export default {
         '/api/admin/chat/hidestatus' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
 
@@ -3153,23 +3316,8 @@ export default {
         '/api/admin/chat/hidestatus' &&
       request.method === 'GET'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const raw =
         await env.KEYS_KV.get(
@@ -3204,23 +3352,8 @@ export default {
         '/api/admin/chat/allconversations' &&
       request.method === 'GET'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       const listed =
         await env.KEYS_KV.list({
@@ -3333,23 +3466,8 @@ export default {
         '/api/admin/chat/deletemsg' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
 
@@ -3457,23 +3575,8 @@ export default {
         '/api/admin/chat/clear' &&
       request.method === 'POST'
     ) {
-      const adminToken =
-        request.headers.get(
-          'X-Admin-Token'
-        );
-
-      if (
-        adminToken !==
-        env.ADMIN_TOKEN
-      ) {
-        return json(
-          {
-            error: 'Unauthorized'
-          },
-          corsHeaders,
-          401
-        );
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
 
@@ -3556,10 +3659,8 @@ export default {
       url.pathname === '/api/admin/chat/profile' &&
       request.method === 'GET'
     ) {
-      const adminToken = request.headers.get('X-Admin-Token');
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json({ error: 'Unauthorized' }, corsHeaders, 401);
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       return json(
         { profile: await getChatAdminProfile(env) },
@@ -3574,10 +3675,8 @@ export default {
       url.pathname === '/api/admin/chat/profile' &&
       request.method === 'POST'
     ) {
-      const adminToken = request.headers.get('X-Admin-Token');
-      if (adminToken !== env.ADMIN_TOKEN) {
-        return json({ error: 'Unauthorized' }, corsHeaders, 401);
-      }
+      const auth = await requireAdmin(request, env);
+      if (auth) return auth;
 
       let body;
       try { body = await request.json(); }
