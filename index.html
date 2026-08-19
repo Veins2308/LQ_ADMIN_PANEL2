@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Key Manager - LQ Mod4</title>
+<title>Key Manager - LQ Mod</title>
 
 <!-- Font & Icons -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -459,6 +459,14 @@
           <input type="password" id="register-pass" placeholder="Ít nhất 8 ký tự" autocomplete="new-password">
           <button class="input-action" type="button" onclick="togglePassword('register-pass', this)" aria-label="Hiện mật khẩu">Hiện</button>
         </div>
+      </div>
+      <div class="form-group">
+        <label>Mã cấp quyền quản trị <span class="optional">không bắt buộc</span></label>
+        <div class="input-icon-wrap">
+          <i class="ri-shield-keyhole-line"></i>
+          <input type="password" id="register-setup-code" placeholder="Chỉ dùng khi thiết lập admin đầu tiên" autocomplete="off" style="padding-left: 42px;">
+        </div>
+        <div class="field-hint">Mã này phải được cấu hình trong Cloudflare Worker và không nằm trong file HTML.</div>
       </div>
       <button class="btn btn-primary btn-lg" style="width: 100%" onclick="doRegister()" id="register-btn"><i class="ri-user-add-line"></i> Tạo tài khoản</button>
     </div>
@@ -1049,14 +1057,6 @@ function clearAuth() {
   AUTH_TOKEN = '';
   CURRENT_USER = null;
   localStorage.removeItem('lq_auth');
-  if (window._authWatchTimer) {
-    clearInterval(window._authWatchTimer);
-    window._authWatchTimer = null;
-  }
-  if (typeof _autoRefreshTimer !== 'undefined' && _autoRefreshTimer) {
-    clearInterval(_autoRefreshTimer);
-    _autoRefreshTimer = null;
-  }
 }
 
 function saveAuth() {
@@ -1137,6 +1137,7 @@ async function doLogin() {
 async function doRegister() {
   const u = document.getElementById('register-user').value.trim();
   const p = document.getElementById('register-pass').value;
+  const setupCode = document.getElementById('register-setup-code').value.trim();
   const url = document.getElementById('login-worker-url').value.trim().replace(/\/$/, '');
   const btn = document.getElementById('register-btn');
 
@@ -1159,7 +1160,7 @@ async function doRegister() {
     const r = await fetch(WORKER_URL + '/api/auth/register', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ username: u, password: p }),
+      body: JSON.stringify({ username: u, password: p, setupCode }),
       cache: 'no-store'
     });
     const data = await r.json().catch(() => ({}));
@@ -1190,92 +1191,15 @@ function doLogout() {
   location.reload();
 }
 
-let _authWatchInFlight = false;
-let _authLastCheck = 0;
-
-function forceImmediateLogout(message = 'Tài khoản vừa bị hạ quyền hoặc phiên đăng nhập không còn hợp lệ.') {
-  clearAuth();
-
-  document.querySelectorAll('.modal-overlay, .chat-panel, .msg-ctx-menu').forEach(el => {
-    if (el.classList.contains('modal-overlay') || el.classList.contains('chat-panel')) {
-      el.style.display = 'none';
-      el.classList.remove('open');
-    } else if (el.parentNode) {
-      el.remove();
-    }
-  });
-
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  switchAuthMode('login');
-
-  const err = document.getElementById('login-err');
-  if (err && message) {
-    err.innerHTML = '<i class="ri-shield-keyhole-line"></i> ' + escapeHtml(message);
-    err.style.display = 'block';
-  }
-}
-
-async function checkAuthFresh(force = false) {
-  if (!AUTH_TOKEN || !WORKER_URL || _authWatchInFlight) return;
-
-  const now = Date.now();
-  if (!force && now - _authLastCheck < 250) return;
-
-  _authLastCheck = now;
-  _authWatchInFlight = true;
-
-  try {
-    const r = await fetch(WORKER_URL + '/api/auth/status', {
-      method: 'GET',
-      headers: authHeaders(false),
-      cache: 'no-store'
-    });
-
-    const data = await r.json().catch(() => ({}));
-
-    if (!r.ok || !data.active || !data.user ||
-        data.user.status !== 'active' || data.user.role !== 'admin') {
-      forceImmediateLogout('Admin gốc đã hạ quyền tài khoản này xuống Member. Bạn đã được đưa về màn hình đăng nhập.');
-      return;
-    }
-
-    CURRENT_USER = data.user;
-
-    const usersBtn = document.getElementById('users-nav-btn');
-    if (usersBtn) usersBtn.style.display = CURRENT_USER.isRoot ? 'inline-flex' : 'none';
-  } catch (_) {
-    // Lỗi mạng tạm thời không tự đăng xuất; lần kiểm tra kế tiếp sẽ xác nhận.
-  } finally {
-    _authWatchInFlight = false;
-  }
-}
-
-function startAuthWatch() {
-  if (window._authWatchTimer) clearInterval(window._authWatchTimer);
-  checkAuthFresh(true);
-  window._authWatchTimer = setInterval(() => checkAuthFresh(false), 700);
-}
-
-document.addEventListener('click', () => checkAuthFresh(true), true);
-document.addEventListener('keydown', () => checkAuthFresh(true), true);
-
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-
   const badge = document.getElementById('admin-badge');
-  badge.textContent = CURRENT_USER?.isRoot ? 'ROOT ADMIN' : 'ADMIN';
-
+  badge.textContent = 'ADMIN';
   const name = document.getElementById('current-user-name');
   if (name) name.textContent = CURRENT_USER?.username || 'Admin';
-
-  const usersBtn = document.getElementById('users-nav-btn');
-  if (usersBtn) usersBtn.style.display = CURRENT_USER?.isRoot ? 'inline-flex' : 'none';
-
   document.getElementById('worker-url-badge').textContent = WORKER_URL;
   loadAllKeys();
-  startAuthWatch();
 }
 
 async function restoreSession() {
@@ -1320,7 +1244,6 @@ restoreSession();
 //  USER MANAGEMENT
 // ════════════════════════════════════════════════════════
 async function openUsersModal() {
-  if (!CURRENT_USER?.isRoot) return forceImmediateLogout();
   const modal = document.getElementById('users-modal');
   modal.style.display = 'flex';
   await loadUsers();
@@ -1345,9 +1268,7 @@ async function loadUsers() {
           <span class="user-role ${u.role === 'admin' ? 'admin' : ''}">${u.role === 'admin' ? '<i class="ri-vip-crown-line"></i> Admin' : '<i class="ri-user-line"></i> Member'}</span>
           ${u.username === CURRENT_USER?.username
             ? '<span class="self-tag">Bạn</span>'
-            : (CURRENT_USER?.isRoot
-                ? `<button class="btn btn-soft btn-sm" onclick="changeUserRole('${escapeJs(u.username)}','${u.role === 'admin' ? 'member' : 'admin'}')">${u.role === 'admin' ? 'Hạ Member' : 'Cấp Admin'}</button>`
-                : '')}
+            : `<button class="btn btn-soft btn-sm" onclick="changeUserRole('${escapeJs(u.username)}','${u.role === 'admin' ? 'member' : 'admin'}')">${u.role === 'admin' ? 'Hạ Member' : 'Cấp Admin'}</button>`}
         </div>
       </div>`).join('');
   } catch (e) {
@@ -1355,7 +1276,6 @@ async function loadUsers() {
   }
 }
 async function changeUserRole(username, role) {
-  if (!CURRENT_USER?.isRoot) return forceImmediateLogout();
   const action = role === 'admin' ? 'cấp Admin cho' : 'hạ quyền của';
   if (!confirm(`Xác nhận ${action} tài khoản "${username}"?`)) return;
   try {
