@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Key Manager - LQ Mod5</title>
+<title>Key Manager - LQ Mod6</title>
 
 <!-- Font & Icons -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1164,6 +1164,7 @@ function doLogout() {
 
 let _authWatchInFlight = false;
 let _authLastCheck = 0;
+let _authEventDebounceTimer = null; // debounce cho click/keydown để tránh spam
 
 function forceImmediateLogout(message = 'Tài khoản vừa bị hạ quyền hoặc phiên đăng nhập không còn hợp lệ.') {
   clearAuth();
@@ -1192,7 +1193,10 @@ async function checkAuthFresh(force = false) {
   if (!AUTH_TOKEN || !WORKER_URL || _authWatchInFlight) return;
 
   const now = Date.now();
-  if (now - _authLastCheck < 900) return;
+  // Tối thiểu 900ms giữa các lần check (chống spam event)
+  // force=true từ event vẫn phải chờ đủ cooldown 30s để không thừa request
+  const minInterval = force ? 30000 : 55000;
+  if (now - _authLastCheck < minInterval) return;
 
   _authLastCheck = now;
   _authWatchInFlight = true;
@@ -1226,11 +1230,21 @@ async function checkAuthFresh(force = false) {
 function startAuthWatch() {
   if (window._authWatchTimer) clearInterval(window._authWatchTimer);
   checkAuthFresh(true);
-  window._authWatchTimer = setInterval(() => checkAuthFresh(false), 3000);
+  // Giảm từ 3s → 60s: session JWT hết hạn sau 30 ngày, không cần poll liên tục.
+  // Nếu admin bị hạ quyền, cache Worker hết sau 30s → check tiếp theo sẽ phát hiện.
+  window._authWatchTimer = setInterval(() => checkAuthFresh(false), 60000);
 }
 
-document.addEventListener('click', () => checkAuthFresh(true), true);
-document.addEventListener('keydown', () => checkAuthFresh(true), true);
+// Debounce click/keydown: chỉ trigger checkAuth sau 2s không có event mới
+// Tránh mỗi click/gõ phím tạo 1 request riêng
+document.addEventListener('click', () => {
+  if (_authEventDebounceTimer) clearTimeout(_authEventDebounceTimer);
+  _authEventDebounceTimer = setTimeout(() => checkAuthFresh(true), 2000);
+}, true);
+document.addEventListener('keydown', () => {
+  if (_authEventDebounceTimer) clearTimeout(_authEventDebounceTimer);
+  _authEventDebounceTimer = setTimeout(() => checkAuthFresh(true), 2000);
+}, true);
 
 function showApp() {
   document.getElementById('login-screen').style.display = 'none';
