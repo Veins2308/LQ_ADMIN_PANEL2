@@ -511,12 +511,10 @@
       <div class="stat-card"><div class="val" id="s-banned" style="color:var(--red)"><i class="ri-forbid-line"></i> —</div><div class="lbl">Bị ban</div></div>
       <div class="stat-card"><div class="val" id="s-devices" style="color:var(--accent2)"><i class="ri-smartphone-line"></i> —</div><div class="lbl">Thiết bị đăng nhập</div></div>
       <div class="stat-card"><div class="val" id="s-online" style="color:#22c55e"><i class="ri-radio-button-line"></i> —</div><div class="lbl">Đang online</div></div>
-      <div class="stat-card" style="cursor:pointer" onclick="openBlacklistModal()"><div class="val" id="s-blacklist" style="color:var(--red)"><i class="ri-shield-forbid-line"></i> —</div><div class="lbl">Blacklist thiết bị</div></div>
     </div>
 
     <!-- Toolbar -->
     <div class="toolbar">
-      <button class="btn btn-danger btn-sm" onclick="openBlacklistModal()" id="blacklist-nav-btn" style="position:relative"><i class="ri-shield-forbid-line"></i><span>Blacklist</span><span id="blacklist-nav-badge" style="display:none;margin-left:4px;background:rgba(255,255,255,.18);border-radius:99px;padding:1px 6px;font-size:10px"></span></button>
       <button class="btn btn-primary" onclick="openCreateModal()"><i class="ri-add-circle-line"></i><span>Tạo key mới</span></button>
       <button class="btn btn-soft" onclick="loadAllKeys(true)"><i class="ri-refresh-line"></i><span>Làm mới</span></button>
       <div class="input-icon-wrap" style="flex:1; min-width:200px">
@@ -666,20 +664,6 @@
         style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:12px;font-size:13.5px;outline:none;padding:10px 14px 10px 42px;">
     </div>
     <div id="devices-list"></div>
-  </div>
-</div>
-
-<!-- ══ MODAL: BLACKLIST THIẾT BỊ ══ -->
-<div class="modal-overlay" id="blacklist-modal" style="display:none">
-  <div class="modal" style="width:620px;max-width:calc(100vw - 28px)">
-    <button class="close" onclick="closeModal('blacklist-modal')"><i class="ri-close-line"></i></button>
-    <h2><i class="ri-shield-forbid-line"></i> Blacklist thiết bị</h2>
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin:8px 0 16px">
-      <div style="color:var(--text2);font-size:13px">Các thiết bị bị khóa bởi cơ chế bảo mật phía client.</div>
-      <button class="btn btn-soft btn-sm" onclick="loadBlacklist(true)"><i class="ri-refresh-line"></i> Làm mới</button>
-    </div>
-    <div id="blacklist-summary" style="padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);margin-bottom:12px;font-size:13px;font-weight:700"></div>
-    <div id="blacklist-list"></div>
   </div>
 </div>
 
@@ -1003,14 +987,6 @@ function authHeaders(json = false) {
   return headers;
 }
 
-// Security paths are encoded in the dashboard source to avoid exposing the
-// route names as plain string literals. The network endpoint remains visible
-// to a live observer by design; this is source-level obfuscation only.
-function lqSecPath(b64) {
-  try { return atob(b64); } catch { return ''; }
-}
-const LQ_SEC_BLACKLIST_PATH = lqSecPath('L2FwaS9hZG1pbi9ibGFja2xpc3Q=');
-
 async function apiGet(path) {
   const r = await fetch(WORKER_URL + path, {
     headers: authHeaders(false),
@@ -1285,7 +1261,6 @@ function showApp() {
 
   document.getElementById('worker-url-badge').textContent = WORKER_URL;
   loadAllKeys();
-  loadBlacklist();
   startAuthWatch();
 }
 
@@ -1607,65 +1582,6 @@ async function saveDeviceNameInline(key, deviceId, idx) {
   } catch(e) {
     showToast('<i class="ri-close-circle-line"></i> Lỗi lưu tên: ' + e.message, 'error');
   }
-}
-
-// ════════════════════════════════════════════════════════
-//  DEVICE BLACKLIST
-// ════════════════════════════════════════════════════════
-let blacklistDevices = [];
-
-async function loadBlacklist(forceFresh = false) {
-  try {
-    const q = forceFresh ? '?fresh=1' : '';
-    const data = await apiGet(LQ_SEC_BLACKLIST_PATH + q);
-    blacklistDevices = Array.isArray(data.devices) ? data.devices : [];
-    const count = Number(data.count ?? blacklistDevices.length);
-    const stat = document.getElementById('s-blacklist');
-    if (stat) stat.innerHTML = `<i class="ri-shield-forbid-line"></i> ${count}`;
-    const badge = document.getElementById('blacklist-nav-badge');
-    if (badge) {
-      badge.textContent = count;
-      badge.style.display = count > 0 ? 'inline-block' : 'none';
-    }
-    renderBlacklist();
-    return data;
-  } catch (e) {
-    return null;
-  }
-}
-
-function renderBlacklist() {
-  const summary = document.getElementById('blacklist-summary');
-  const list = document.getElementById('blacklist-list');
-  if (!summary || !list) return;
-  summary.innerHTML = `<i class="ri-error-warning-line"></i> Tổng thiết bị bị blacklist: <strong>${blacklistDevices.length}</strong>`;
-  if (!blacklistDevices.length) {
-    list.innerHTML = '<div class="device-empty"><i class="ri-shield-check-line"></i> Chưa có thiết bị nào trong blacklist.</div>';
-    return;
-  }
-  list.innerHTML = blacklistDevices.map((d, i) => `
-    <div class="device-item" style="border-color:rgba(239,68,68,.28)">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-        <div style="min-width:0;flex:1">
-          <div style="font-size:12px;color:var(--text2);font-weight:700;margin-bottom:5px">THIẾT BỊ #${i + 1}</div>
-          <div class="did" style="word-break:break-all;color:var(--red);font-size:12px">${escapeHtml(d.deviceID || '—')}</div>
-        </div>
-        <span style="font-size:11px;color:#fff;background:var(--red);padding:4px 8px;border-radius:99px;white-space:nowrap">BLACKLISTED</span>
-      </div>
-      <div style="margin-top:10px;color:var(--text2);font-size:11.5px;line-height:1.6">
-        <div><strong>Lý do:</strong> ${escapeHtml(d.reason || 'security_tamper')}</div>
-        <div><strong>Phát hiện:</strong> ${d.createdAt ? new Date(d.createdAt).toLocaleString('vi-VN') : '—'}</div>
-        <div><strong>Hoạt động cuối:</strong> ${d.lastSeen ? new Date(d.lastSeen).toLocaleString('vi-VN') : '—'}</div>
-        <div><strong>Nguồn:</strong> ${escapeHtml(d.source || 'client')}</div>
-      </div>
-    </div>`).join('');
-}
-
-async function openBlacklistModal() {
-  document.getElementById('blacklist-modal').style.display = 'flex';
-  const list = document.getElementById('blacklist-list');
-  if (list) list.innerHTML = '<div class="empty-state"><i class="ri-loader-4-line ri-spin"></i> Đang tải blacklist...</div>';
-  await loadBlacklist(true);
 }
 
 // ════════════════════════════════════════════════════════
@@ -2345,7 +2261,6 @@ function startAutoRefresh() {
         keys = data.keys || [];
         filterTable(); // áp dụng lại bộ lọc hiện tại
         renderStats();
-        await loadBlacklist(false);
         // Nếu modal thiết bị đang mở, cập nhật lại danh sách thiết bị
         const devModal = document.getElementById('devices-modal');
         if (devModal && devModal.style.display !== 'none' && window._devicesCurrentKey) {
